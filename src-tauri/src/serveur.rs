@@ -217,6 +217,13 @@ async fn servir_une_connexion(
     };
 
     // Un appairage accepte se retient, sinon l'utilisateur devrait redire oui a chaque connexion.
+    //
+    // ⛔ **Ecrit sur le DISQUE, pas seulement en memoire.** Une premiere version ne faisait
+    // qu'ajouter a la liste partagee en memoire (`Arc<Mutex<Appaires>>`) : l'ecran disait
+    // « Téléphone autorisé », la liste affichee restait vide (elle relit le fichier via
+    // `reseau_appareils`/`charger_appaires`), et un redemarrage d'Oyant aurait perdu
+    // l'autorisation sans que personne ne s'en apercoive avant la prochaine tentative. Trouve en
+    // appairant pour de vrai, pas en relecture.
     if let Reponse::Bienvenue { empreinte } = &finale {
         let mut liste = appaires.lock().await;
         if !liste.autorise(empreinte) {
@@ -225,6 +232,9 @@ async fn servir_une_connexion(
                 nom: bonjour.nom.clone(),
                 appaire_le: horodatage(),
             });
+            if let Err(message) = enregistrer_appaires(&liste) {
+                eprintln!("appairage : échec d'écriture de la liste des appareils : {message}");
+            }
         }
     }
 

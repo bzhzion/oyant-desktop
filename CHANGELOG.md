@@ -9,6 +9,19 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- ⛔ **Un appairage accepté n'était jamais écrit sur le disque, seulement retenu en mémoire.**
+  L'écran affichait bien « Téléphone autorisé », mais la liste des appareils restait vide (elle
+  relit le fichier via `reseau_appareils`), et un redémarrage d'Oyant aurait perdu l'autorisation
+  sans aucun avertissement. Trouvé en appairant pour de vrai, pas en relecture. Corrigé :
+  `enregistrer_appaires` est maintenant appelée dans le même geste que l'ajout en mémoire, comme
+  elle l'était déjà pour la révocation.
+
+  ⚠️ **Limite connue et non corrigée dans ce lot** : la révocation, elle, lit et écrit sa propre
+  copie fraîche du fichier, indépendante de celle que le serveur garde en mémoire pendant qu'il
+  tourne. Révoquer un appareil depuis l'écran pendant qu'Oyant tourne retire bien la ligne de la
+  liste et du fichier, mais ne coupe l'accès de ce téléphone qu'**après un redémarrage d'Oyant** —
+  même limite que les deux réglages réseau, déjà documentée, pas encore unifiée.
+
 - ⛔ **La dictée échouait sur certains microphones avec « Format audio non pris en charge : U8 »,
   à chaque appui du raccourci.** `configuration_preferee` prenait la PREMIÈRE plage mono couvrant
   16 kHz, sans jamais regarder son format d'échantillon. Un micro qui n'expose ce mono 16 kHz
