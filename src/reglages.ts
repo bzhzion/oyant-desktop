@@ -71,7 +71,10 @@ type Champ =
   | (Base & { type: 'choix'; options: Array<[string, string]> })
   | (Base & { type: 'texte' });
 
-type Groupe = { titre: string; champs: Champ[] };
+/** `conteneur` est l'ID du `div` de l'onglet ou ce groupe doit s'afficher. ⚠️ Un groupe par
+ * conteneur aujourd'hui, mais rien n'empeche plusieurs groupes de partager le meme onglet : c'est
+ * le cas d'aucun aujourd'hui, mais la forme le permettrait sans y retoucher. */
+type Groupe = { titre: string; conteneur: string; champs: Champ[] };
 
 // ⚠️ Cette liste EST l'inventaire des reglages : elle fait autorite, et le test
 // `reglages_utilises` echoue si un reglage y apparait sans rien piloter. Ce qui demande
@@ -81,6 +84,7 @@ type Groupe = { titre: string; champs: Champ[] };
 const GROUPES: Groupe[] = [
   {
     titre: 'Capture',
+    conteneur: 'reglages-capture',
     champs: [
       {
         cle: 'hotkey',
@@ -169,6 +173,7 @@ const GROUPES: Groupe[] = [
   // n'est cassée, et ils reviendront le jour où quelque chose les lit.
   {
     titre: 'Transcription',
+    conteneur: 'reglages-transcription',
     champs: [
       {
         cle: 'language',
@@ -209,6 +214,7 @@ const GROUPES: Groupe[] = [
   },
   {
     titre: 'Sortie',
+    conteneur: 'reglages-sortie',
     champs: [
       {
         cle: 'injection_delay_ms',
@@ -259,6 +265,7 @@ const GROUPES: Groupe[] = [
   },
   {
     titre: 'Interface',
+    conteneur: 'reglages-application',
     champs: [
       {
         cle: 'notifications',
@@ -285,6 +292,7 @@ const GROUPES: Groupe[] = [
   },
   {
     titre: 'Téléphone',
+    conteneur: 'reglages-telephone',
     champs: [
       {
         cle: 'network_enabled',
@@ -568,10 +576,15 @@ function champVersDom(champ: Champ): HTMLElement {
 }
 
 function construire(): void {
-  const hote = document.getElementById('reglages');
-  if (!hote) return;
-
   for (const groupe of GROUPES) {
+    // ⚠️ Chaque groupe cherche SON PROPRE conteneur, celui de l'onglet ou il doit s'afficher :
+    // ce n'est plus un unique `#reglages` qui recevait tout le monde avant la refonte en onglets.
+    const hote = document.getElementById(groupe.conteneur);
+    if (!hote) {
+      console.error(`Groupe « ${groupe.titre} » sans conteneur : #${groupe.conteneur} introuvable.`);
+      continue;
+    }
+
     // `fieldset` et `legend` : le groupe est annoncé avant ses champs par les lecteurs d'écran,
     // ce qu'un simple titre visuel ne fait pas.
     const bloc = document.createElement('fieldset');

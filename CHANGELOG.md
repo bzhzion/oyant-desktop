@@ -7,6 +7,39 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Modifié
+
+- **L'écran de réglages passe d'une seule liste qui défile à six onglets.** La page avait
+  grossi groupe après groupe (Capture, Transcription, Sortie, Interface, Téléphone, plus
+  vocabulaire/substitutions/historique/appairage) jusqu'à devenir une unique colonne trop longue
+  pour une fenêtre pensée petite. Six onglets, chacun court : **Transcription** (moteur, modèles,
+  langue/cœurs/marge, vocabulaire), **Capture**, **Sortie** (+ substitutions), **Téléphone** (+
+  appareils appairés), **Application** (démarrage, notifications, historique), **À propos**
+  (version, chemin, copyright : retiré du pied de page permanent, qui n'existe plus).
+
+  ⚠️ **Le mode « Réglages avancés » reste UNIQUE et hors des onglets**, juste sous la barre : c'est
+  un mode qui s'applique à toutes les sections à la fois, pas une donnée propre à l'une d'elles. Le
+  dupliquer dans chaque onglet aurait pu diverger (coché ici, pas là), et l'aurait répété six fois
+  pour rien.
+
+  ⛔ **Accessibilité : vrai motif WAI-ARIA « tabs »**, pas des boutons qui masquent des `div` au
+  hasard : `role="tablist"`/`"tab"`/`"tabpanel"`, `aria-selected`, tabindex en carrousel (un seul
+  onglet atteignable par Tab, les flèches déplacent le focus ENTRE onglets, Origine/Fin sautent
+  au premier/dernier). Sans ça, un clavier ou un lecteur d'écran aurait dû traverser six boutons
+  avant d'atteindre le contenu, pour une barre qui n'existait pas avant cette refonte.
+
+  ⛔ **Bug trouvé en vérifiant pour de vrai, pas en relisant le CSS** : les six panneaux partagent
+  UN SEUL conteneur défilant, et rien ne remettait son défilement à zéro en changeant d'onglet,
+  donc un onglet long laissé scrollé, puis un onglet plus court choisi ensuite, atterrissait à moitié
+  caché. Corrigé par une remise à zéro explicite à chaque changement, plutôt que de compter sur le
+  fait qu'un onglet plus court recadre tout seul (ce qui n'est vrai QUE par coïncidence de
+  longueur, pas par garantie).
+
+  ⚠️ **La fenêtre réduite à sa largeur minimale (460 px) affichait la barre de défilement par
+  défaut du navigateur** (grise, à flèches) sur la barre d'onglets elle-même, repérée en testant
+  à cette largeur et pas seulement à la largeur par défaut : corrigée pour reprendre le même
+  filet fin et accent que le reste de l'application.
+
 ### Corrigé
 
 - ⛔ **Un appairage accepté n'était jamais écrit sur le disque, seulement retenu en mémoire.**

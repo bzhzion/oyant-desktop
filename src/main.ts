@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { brancherReglages } from './reglages';
 import { brancherModeles, brancherMoteurs } from './modeles';
 import { installerAppairage } from './appairage';
+import { installerOnglets } from './onglets';
 
 type Etat = { version: string; plateforme: string; injection: string };
 
@@ -144,6 +145,7 @@ async function brancherProblemesDeDictee(): Promise<void> {
   });
 }
 
+installerOnglets();
 void brancherCommandes();
 void afficherEtat();
 poserCopyright();

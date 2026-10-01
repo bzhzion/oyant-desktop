@@ -59,6 +59,26 @@ flottantes ni d'ombres portees : sur une face avant, les groupes sont graves, pa
 **Densite controlee plutot que grand vide.** La fenetre est petite et convoquee pour une tache
 precise ; l'air se met entre les groupes, pas a l'interieur.
 
+### Les onglets du panneau de reglages (2026-10-01)
+
+La liste de reglages a grossi groupe apres groupe jusqu'a devenir une seule colonne trop longue
+pour une fenetre pensee petite. Six onglets la remplacent : Transcription, Capture, Sortie,
+Telephone, Application, A propos. ⚠️ **Ce n'est pas la barre laterale de tableau de bord que le
+parti pris refuse plus haut** : les onglets restent HORIZONTAUX, en tete du panneau, dans le meme
+mono-capitales-interlettrage que les libelles de section : un selecteur de canal sur une face
+avant d'appareil, pas une navigation qui invite a explorer.
+
+Le filet actif **remplace** celui, neutre, du bas de la barre, plutot que de s'y ajouter : deux
+filets l'un sous l'autre auraient fait une double ligne, lourde et non voulue.
+
+⚠️ **Le mode « Reglages avances » reste UNIQUE, hors des onglets.** C'est un mode qui s'applique a
+toutes les sections a la fois, pas une donnee propre a l'une d'elles : le repeter dans chaque
+onglet l'aurait fait diverger (coche ici, pas la).
+
+⛔ **Les six panneaux partagent UN SEUL conteneur defilant.** Changer d'onglet remet ce defilement
+a zero explicitement : compter sur le fait que le nouvel onglet est plus court et recadre tout
+seul est une coincidence de longueur, pas une garantie, et ca s'est vu au premier essai reel.
+
 ## Le fond n'est pas plat
 
 Un degrade vertical tres faible depuis `bg`, plus un **grain a 2 ou 3 pour cent**. Ce n'est pas

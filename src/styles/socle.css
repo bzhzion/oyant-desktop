@@ -212,10 +212,136 @@ body {
 
 /* ── Panneau ──────────────────────────────────────────────────────────────────────── */
 
+/* ⚠️ Le panneau lui-meme ne defile plus : depuis la refonte en onglets, c'est une colonne a
+ * trois etages (la barre d'onglets, le contenu de l'onglet actif, la ligne d'etat), et SEUL
+ * l'etage du milieu defile. `min-height: 0` est indispensable sur un conteneur flex dont un
+ * enfant doit pouvoir devenir plus petit que son contenu : sans lui, Chromium laisse l'enfant
+ * imposer sa hauteur naturelle au parent, et `overflow-y: auto` de `.contenu-onglets` n'a jamais
+ * rien a faire puisque rien ne deborde de LUI, tout deborde du panneau entier. */
 .panneau {
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Barre d'onglets ──────────────────────────────────────────────────────────────── */
+
+/* ⚠️ `overflow-x: auto` et pas de retour a la ligne : sous 460 px (la largeur minimale de la
+ * fenetre), six libelles ne tiennent pas tous a plat. Un defilement horizontal discret reste
+ * lisible ; un retour a la ligne ferait flotter le filet actif entre deux rangees. */
+.onglets {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  gap: calc(var(--pas) * 1.5);
+  padding: calc(var(--pas) * 2) calc(var(--pas) * 2.5) 0;
+  border-bottom: 1px solid var(--bordure);
+  overflow-x: auto;
+}
+
+/* ⛔ Sans ceci, la fenetre reduite a sa largeur minimale affiche la barre de defilement PAR
+ * DEFAUT du navigateur (grise, avec des fleches) : une face avant d'appareil n'a pas ce genre de
+ * chrome generique. Fine, et dans les memes tons que celle de `.contenu-onglets`. */
+.onglets::-webkit-scrollbar {
+  height: 6px;
+}
+
+.onglets::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.onglets::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.onglet {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0 calc(var(--pas) * 0.25) calc(var(--pas) * 1.25);
+  border: 0;
+  background: transparent;
+  color: var(--texte-doux);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  cursor: default;
+  transition: color 120ms ease-out;
+}
+
+/* Le filet actif REMPLACE visuellement celui, neutre, de `.onglets` (il le chevauche d'un
+ * pixel) plutot que de s'y ajouter : deux filets l'un sous l'autre auraient fait une double
+ * ligne epaisse de 3 px, visible et non voulue. */
+.onglet::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.onglet:hover {
+  color: var(--texte);
+}
+
+.onglet[aria-selected='true'] {
+  color: var(--texte);
+}
+
+.onglet[aria-selected='true']::after {
+  opacity: 1;
+}
+
+.onglet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onglet,
+  .onglet::after {
+    transition: none;
+  }
+}
+
+/* En-tete « reglages avances », repositionne directement sous la barre d'onglets : c'est un
+ * MODE qui s'applique a tous les onglets a la fois (voir le commentaire dans `index.html`), donc
+ * il vit une seule fois ici et pas repete dans chacun. */
+.entete-avances {
+  display: flex;
+  justify-content: flex-end;
+  padding: calc(var(--pas) * 1.5) calc(var(--pas) * 2.5) 0;
+}
+
+/* La note des reglages avances masques est, elle aussi, HORS de la zone qui defile : elle avait
+ * sa marge horizontale offerte par le `padding` de `.panneau` avant la refonte, qu'elle a perdu
+ * en devenant un enfant direct de `.panneau`. */
+.panneau > .note {
+  margin-left: calc(var(--pas) * 2.5);
+  margin-right: calc(var(--pas) * 2.5);
+}
+
+/* ── Contenu de l'onglet actif : seul etage qui defile ───────────────────────────────── */
+
+.contenu-onglets {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: calc(var(--pas) * 2.5);
+  padding: calc(var(--pas) * 2) calc(var(--pas) * 2.5) calc(var(--pas) * 2.5);
+}
+
+.panneau-onglet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ── Barre de defilement ──────────────────────────────────────────────────────────── */
@@ -224,15 +350,15 @@ body {
  * `scrollbar-width` / `scrollbar-color` : sur Chromium, poser l'une des deux standard fait
  * IGNORER les pseudo-elements. Melanger les deux approches donne donc la barre par defaut, sans
  * aucun message. WebView2 etant Chromium, ce chemin-la est celui qui sert reellement. */
-.panneau::-webkit-scrollbar {
+.contenu-onglets::-webkit-scrollbar {
   width: 12px;
 }
 
-.panneau::-webkit-scrollbar-track {
+.contenu-onglets::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.panneau::-webkit-scrollbar-thumb {
+.contenu-onglets::-webkit-scrollbar-thumb {
   /* ⚠️ `--accent` et pas `--accent-texte` : c'est un element non textuel, dont le seuil WCAG est
    * de 3:1 et non 4,5:1. Mesure sur le fond de la fenetre : 3,61:1, donc conforme. */
   background: var(--accent);
@@ -242,8 +368,27 @@ body {
   border-radius: 999px;
 }
 
-.panneau::-webkit-scrollbar-thumb:hover {
+.contenu-onglets::-webkit-scrollbar-thumb:hover {
   background: #5b9bd1;
+}
+
+/* ── Ligne d'etat : persistante, hors de la zone qui defile ──────────────────────────── */
+
+/* ⚠️ Reutilise `.message` telle quelle (y compris son repli `:empty { display: none }`) : seule
+ * la disposition change, pas l'apparence ni la logique d'apparition. */
+.barre-etat {
+  flex: 0 0 auto;
+  margin: 0;
+  border-top: 1px solid var(--bordure);
+  border-left: 0;
+  border-radius: 0;
+  padding: calc(var(--pas) * 1) calc(var(--pas) * 2.5);
+}
+
+/* `.message-erreur` portait sa couleur sur `border-left`, annule ci-dessus : report sur
+ * `border-top`, seule bordure que cette variante conserve. */
+.barre-etat.message-erreur {
+  border-top-color: var(--danger);
 }
 
 /* ── Bascule des reglages avances ─────────────────────────────────────────────────── */
@@ -292,12 +437,6 @@ body {
   background: var(--surface);
   color: var(--texte);
   font-size: 13px;
-}
-
-.module + .module {
-  margin-top: calc(var(--pas) * 3);
-  padding-top: calc(var(--pas) * 3);
-  border-top: 1px solid var(--bordure);
 }
 
 /* Libelle de section grave : c'est lui qui fait la face avant. */
@@ -778,14 +917,19 @@ input[type='checkbox'].interrupteur:disabled {
 /* ── Eveil de la fenetre ──────────────────────────────────────────────────────────── */
 
 /* La fenetre est CONVOQUEE depuis la zone de notification, elle doit donner l'impression de
- * s'eveiller. Une seule orchestration, rien d'autre ne bouge. */
+ * s'eveiller. Une seule orchestration, rien d'autre ne bouge.
+ *
+ * ⚠️ `.panneau` et non plus une liste de `.module` : la refonte en onglets a remplace la pile de
+ * sections empilees par UN SEUL panneau coherent (barre d'onglets, contenu, ligne d'etat), donc
+ * il n'y a plus qu'un second temps a eveiller apres le bandeau, pas plusieurs modules distincts a
+ * faire apparaitre l'un apres l'autre. */
 @media (prefers-reduced-motion: no-preference) {
   .bandeau,
-  .module {
+  .panneau {
     animation: eveil 180ms ease-out both;
   }
 
-  .module {
+  .panneau {
     animation-delay: 40ms;
   }
 

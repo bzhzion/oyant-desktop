@@ -32,119 +32,152 @@
     </header>
 
     <main class="panneau">
-      <!-- Premier ecran au premier lancement : sans modele, Oyant ne peut rien faire, donc
-           c'est la premiere chose a regler. -->
-      <section class="module" aria-labelledby="titre-modeles">
-        <h2 class="section" id="titre-modeles">Transcription</h2>
-        <!-- ⚠️ Le mot « moteur » a ete retire de l'ecran le 2026-09-17 : c'est le mot des
-             developpeurs, il ne dit rien a qui decouvre. On nomme les deux pieces par ce
-             qu'elles font. -->
-        <p class="corps">
-          Pour transformer votre voix en texte, Oyant a besoin de deux choses : un petit
-          <strong>programme</strong> qui fait le calcul, et un <strong>modèle</strong> qui
-          connaît la langue. Les deux restent sur votre ordinateur, et aucun enregistrement
-          n’en sort.
-        </p>
+      <!-- ⛔ La barre d'onglets est HORS de la zone qui defile, et pas rangee dans chaque
+           section : elle reste sous les yeux pendant qu'on consulte un onglet long, et c'est elle
+           qui fait office de titre visible pour la section active (voir `aria-labelledby` plus
+           bas, pointe vers l'onglet et non vers un titre repete a l'interieur). -->
+      <nav class="onglets" role="tablist" aria-label="Sections des réglages">
+        <button type="button" role="tab" class="onglet" id="onglet-transcription"
+                aria-controls="panneau-transcription" aria-selected="true">Transcription</button>
+        <button type="button" role="tab" class="onglet" id="onglet-capture" tabindex="-1"
+                aria-controls="panneau-capture" aria-selected="false">Capture</button>
+        <button type="button" role="tab" class="onglet" id="onglet-sortie" tabindex="-1"
+                aria-controls="panneau-sortie" aria-selected="false">Sortie</button>
+        <button type="button" role="tab" class="onglet" id="onglet-telephone" tabindex="-1"
+                aria-controls="panneau-telephone" aria-selected="false">Téléphone</button>
+        <button type="button" role="tab" class="onglet" id="onglet-application" tabindex="-1"
+                aria-controls="panneau-application" aria-selected="false">Application</button>
+        <button type="button" role="tab" class="onglet" id="onglet-apropos" tabindex="-1"
+                aria-controls="panneau-apropos" aria-selected="false">À propos</button>
+      </nav>
 
-        <!-- ⛔ Le moteur vient AVANT les modeles a l'ecran : sans lui, aucun modele ne
-             sert a rien. C'est le binaire de whisper.cpp, telecharge plutot que compile avec
-             nous, parce que le support du processeur graphique est une question de QUEL binaire
-             on installe et pas de code. -->
-        <h3 class="sous-section">Sur quoi l’ordinateur calcule</h3>
-        <div id="moteurs"></div>
-
-        <h3 class="sous-section">Modèles de langue</h3>
-        <div id="modeles"></div>
-
-        <!-- ⚠️ Zone de message obligatoire : une empreinte qui ne correspond pas est le
-             message le plus utile que cet ecran puisse produire, il ne doit jamais se perdre. -->
-        <p class="message" id="message-modeles" role="status"></p>
-      </section>
-
-      <!-- ⛔ Les reglages vivent ICI et nulle part ailleurs. Le menu de l'icone de la zone de
-           notification ne porte que des actions. Voir src-tauri/src/reglages.rs. -->
-      <section class="module" aria-labelledby="titre-reglages">
-        <div class="entete-section">
-          <h2 class="section" id="titre-reglages">Réglages</h2>
-
-          <!-- ⚠️ Bascule minimale en haut a droite. C'est une VRAIE case a cocher, juste
-               dessinee petit : un faux interrupteur en div perdrait le clavier, le role annonce
-               et l'etat coche, qu'on n'aurait plus qu'a reconstruire a la main. -->
-          <div class="bascule-avances">
-            <input type="checkbox" class="interrupteur" id="avances" />
-            <label for="avances">Avancés</label>
-          </div>
+      <!-- ⚠️ Le mode « avances » et son compte vivent HORS des onglets, juste en dessous de la
+           barre : c'est un MODE qui s'applique a toutes les sections a la fois, pas une donnee
+           propre a l'une d'elles. Le poser dans chaque onglet l'aurait duplique cinq fois et
+           aurait pu diverger (coche dans un onglet, pas dans l'autre). -->
+      <!-- ⚠️ Pas de libelle a gauche : avec les onglets, un « Reglages avances » a cote d'un
+           bouton « Avances » dirait deux fois la meme chose, cote a cote. Le bouton seul suffit,
+           aligne a droite comme il l'etait deja. -->
+      <div class="entete-avances">
+        <div class="bascule-avances">
+          <input type="checkbox" class="interrupteur" id="avances" />
+          <label for="avances">Avancés</label>
         </div>
+      </div>
+      <!-- ⛔ Le repli des reglages avances est acceptable A LA CONDITION que rien de modifie
+           ne devienne introuvable : la note ci-dessous dit combien d'entre eux ne sont plus a
+           leur valeur par defaut quand ils sont masques, QUEL QUE SOIT l'onglet ou ils se
+           trouvent. -->
+      <p class="note" id="note-avances" hidden></p>
 
-        <!-- ⛔ Le repli des reglages avances est acceptable A LA CONDITION que rien de modifie
-             ne devienne introuvable : la note ci-dessous dit combien d'entre eux ne sont plus a
-             leur valeur par defaut quand ils sont masques. -->
-        <p class="note" id="note-avances" hidden></p>
+      <div class="contenu-onglets">
+        <!-- Premier ecran au premier lancement : sans modele, Oyant ne peut rien faire, donc
+             c'est la premiere chose a regler. -->
+        <section class="panneau-onglet" id="panneau-transcription" role="tabpanel"
+                  aria-labelledby="onglet-transcription" tabindex="0">
+          <!-- ⚠️ Le mot « moteur » a ete retire de l'ecran le 2026-09-17 : c'est le mot des
+               developpeurs, il ne dit rien a qui decouvre. On nomme les deux pieces par ce
+               qu'elles font. -->
+          <p class="corps">
+            Pour transformer votre voix en texte, Oyant a besoin de deux choses : un petit
+            <strong>programme</strong> qui fait le calcul, et un <strong>modèle</strong> qui
+            connaît la langue. Les deux restent sur votre ordinateur, et aucun enregistrement
+            n’en sort.
+          </p>
 
-        <!-- ⚠️ Ce groupe est ECRIT A LA MAIN et pas genere avec les autres, parce que sa
-             source de verite n'est pas notre fichier de configuration mais le SYSTEME (la cle Run
-             de Windows). Le recopier dans le fichier creerait un miroir qui finirait par diverger
-             de l'original. Voir src-tauri/src/reglages.rs. -->
-        <fieldset class="groupe">
-          <legend class="section">Démarrage</legend>
-          <div class="reglage">
-            <input type="checkbox" class="interrupteur" id="demarrage" disabled aria-describedby="demarrage-aide" />
-            <label for="demarrage">
-              <span class="reglage-titre">Démarrer avec le système</span>
-              <span class="reglage-aide" id="demarrage-aide">
-                Oyant s'ouvre dans la zone de notification à l'ouverture de votre session, sans
-                afficher sa fenêtre.
-              </span>
-            </label>
-          </div>
-        </fieldset>
+          <!-- ⛔ Le moteur vient AVANT les modeles a l'ecran : sans lui, aucun modele ne
+               sert a rien. C'est le binaire de whisper.cpp, telecharge plutot que compile avec
+               nous, parce que le support du processeur graphique est une question de QUEL binaire
+               on installe et pas de code. -->
+          <h3 class="sous-section">Sur quoi l’ordinateur calcule</h3>
+          <div id="moteurs"></div>
 
-        <!-- Les autres groupes sont generes depuis src/reglages.ts, pour que l'etiquette liee, le
-             texte d'aide rattache et la taille de cible soient identiques partout. -->
-        <div id="reglages"></div>
+          <h3 class="sous-section">Modèles de langue</h3>
+          <div id="modeles"></div>
 
-        <!-- Les substitutions et l'historique sont des LISTES, pas des valeurs : ils ne passent
-             pas par la generation declarative des autres reglages, qui ne connait que les
-             booleens, les nombres, les choix et le texte. -->
-        <!-- L'ordre de ces deux blocs suit celui du traitement, et ce n'est pas cosmetique :
-             le vocabulaire agit AVANT la transcription en aidant le moteur a bien entendre, les
-             substitutions agissent APRES en corrigeant le texte. Les presenter dans l'ordre
-             inverse ferait croire a deux facons de faire la meme chose. -->
-        <div id="vocabulaire"></div>
-        <div id="substitutions"></div>
-        <div id="historique"></div>
+          <!-- ⚠️ Zone de message obligatoire : une empreinte qui ne correspond pas est le
+               message le plus utile que cet ecran puisse produire, il ne doit jamais se perdre. -->
+          <p class="message" id="message-modeles" role="status"></p>
 
-        <!-- Appairage d'un telephone. ⚠️ Place APRES les reglages et pas dans un ecran a part :
-             c'est la que l'utilisateur vient de cocher « accepter les connexions », donc c'est la
-             qu'il cherche ce qui en decoule. -->
-        <div id="appairage"></div>
+          <!-- Les reglages generes (langue, coeurs, marge d'interpretation) : le vocabulaire agit
+               AVANT la transcription en aidant le moteur a bien entendre, donc il vit ici et pas
+               dans l'onglet Sortie. -->
+          <div id="reglages-transcription"></div>
+          <div id="vocabulaire"></div>
+        </section>
 
-        <!-- ⚠️ Zone de message obligatoire : une ecriture peut etre refusee par le systeme,
-             et un reglage qui echoue en silence est pire que pas de reglage du tout. -->
-        <p class="message" id="message-reglages" role="status"></p>
-      </section>
+        <section class="panneau-onglet" id="panneau-capture" role="tabpanel"
+                  aria-labelledby="onglet-capture" tabindex="0" hidden>
+          <div id="reglages-capture"></div>
+        </section>
 
-      <!-- Bloc « A propos » en bas, motif du parc : les mesures, puis le copyright centre
-           dessous. ⚠️ Il est DANS la zone qui defile et pas colle au bas de la fenetre : un
-           pied fixe mangerait une bande de 80 px sur une fenetre de 640. -->
-      <footer class="pied">
-        <dl class="mesures" id="mesures">
-          <div><dt>Version</dt><dd id="version">...</dd></div>
-          <div><dt>Plateforme</dt><dd id="plateforme">...</dd></div>
-          <!-- ⚠️ « Injection » est le mot du domaine, il ne dit rien a qui decouvre le logiciel.
-               C'est la facon dont Oyant tape le texte dans l'application visee. -->
-          <div><dt>Écriture du texte</dt><dd id="injection">...</dd></div>
-        </dl>
+        <section class="panneau-onglet" id="panneau-sortie" role="tabpanel"
+                  aria-labelledby="onglet-sortie" tabindex="0" hidden>
+          <!-- Les substitutions agissent APRES la transcription, en corrigeant le texte : elles
+               vivent ici et pas dans l'onglet Transcription. -->
+          <div id="reglages-sortie"></div>
+          <div id="substitutions"></div>
+        </section>
 
-        <p class="chemin">
-          <span class="chemin-libelle">Fichier de réglages</span>
-          <code id="chemin-reglages">...</code>
-        </p>
+        <section class="panneau-onglet" id="panneau-telephone" role="tabpanel"
+                  aria-labelledby="onglet-telephone" tabindex="0" hidden>
+          <div id="reglages-telephone"></div>
 
-        <!-- ⚠️ L'annee est CALCULEE a l'execution, jamais ecrite en dur : une annee figee
-             devient fausse le 1er janvier, et personne ne pense a la corriger. -->
-        <p class="copyright" id="copyright"></p>
-      </footer>
+          <!-- Appairage d'un telephone. ⚠️ Place APRES les deux reglages reseau et pas avant :
+               c'est la qu'on vient de cocher « accepter les connexions », donc c'est la qu'on
+               cherche ce qui en decoule. -->
+          <div id="appairage"></div>
+        </section>
+
+        <section class="panneau-onglet" id="panneau-application" role="tabpanel"
+                  aria-labelledby="onglet-application" tabindex="0" hidden>
+          <!-- ⚠️ Ce groupe est ECRIT A LA MAIN et pas genere avec les autres, parce que sa
+               source de verite n'est pas notre fichier de configuration mais le SYSTEME (la cle
+               Run de Windows). Le recopier dans le fichier creerait un miroir qui finirait par
+               diverger de l'original. Voir src-tauri/src/reglages.rs. -->
+          <fieldset class="groupe">
+            <legend class="section">Démarrage</legend>
+            <div class="reglage">
+              <input type="checkbox" class="interrupteur" id="demarrage" disabled aria-describedby="demarrage-aide" />
+              <label for="demarrage">
+                <span class="reglage-titre">Démarrer avec le système</span>
+                <span class="reglage-aide" id="demarrage-aide">
+                  Oyant s'ouvre dans la zone de notification à l'ouverture de votre session, sans
+                  afficher sa fenêtre.
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div id="reglages-application"></div>
+          <div id="historique"></div>
+        </section>
+
+        <section class="panneau-onglet" id="panneau-apropos" role="tabpanel"
+                  aria-labelledby="onglet-apropos" tabindex="0" hidden>
+          <dl class="mesures" id="mesures">
+            <div><dt>Version</dt><dd id="version">...</dd></div>
+            <div><dt>Plateforme</dt><dd id="plateforme">...</dd></div>
+            <!-- ⚠️ « Injection » est le mot du domaine, il ne dit rien a qui decouvre le logiciel.
+                 C'est la facon dont Oyant tape le texte dans l'application visee. -->
+            <div><dt>Écriture du texte</dt><dd id="injection">...</dd></div>
+          </dl>
+
+          <p class="chemin">
+            <span class="chemin-libelle">Fichier de réglages</span>
+            <code id="chemin-reglages">...</code>
+          </p>
+
+          <!-- ⚠️ L'annee est CALCULEE a l'execution, jamais ecrite en dur : une annee figee
+               devient fausse le 1er janvier, et personne ne pense a la corriger. -->
+          <p class="copyright" id="copyright"></p>
+        </section>
+      </div>
+
+      <!-- ⚠️ Zone de message obligatoire et HORS de la zone qui defile : une ecriture peut etre
+           refusee par le systeme, et un reglage qui echoue en silence est pire que pas de reglage
+           du tout. Elle reste visible quel que soit l'onglet ou le defilement en cours. -->
+      <p class="message barre-etat" id="message-reglages" role="status"></p>
     </main>
 
     <script type="module" src="/src/main.ts"></script>
