@@ -177,6 +177,23 @@ pub fn demarrer(microphone: &str, duree_maximale_s: u32) -> Result<Enregistremen
             sur_erreur,
             None,
         ),
+        cpal::SampleFormat::U8 => peripherique.build_input_stream(
+            configuration,
+            {
+                let accumulateur = echantillons.clone();
+                move |donnees: &[u8], _| {
+                    if let Ok(mut tampon) = accumulateur.lock() {
+                        // ⚠️ Origine a 128, pas a 0 : voir la doc de `cpal::SampleFormat::U8`.
+                        let convertis = donnees
+                            .iter()
+                            .map(|&valeur| (valeur as f32 - 128.0) / 128.0);
+                        ajouter(&mut tampon, convertis, plafond);
+                    }
+                }
+            },
+            sur_erreur,
+            None,
+        ),
         autre => return Err(format!("Format audio non pris en charge : {autre:?}")),
     }
     .map_err(|erreur| format!("Microphone inutilisable : {erreur}"))?;
@@ -192,6 +209,56 @@ pub fn demarrer(microphone: &str, duree_maximale_s: u32) -> Result<Enregistremen
     })
 }
 
+/// Les formats d'echantillon que ce module sait convertir vers le moteur.
+///
+/// ⛔ **Doit rester synchronise avec les branches du `match` dans `demarrer`** : y accepter un
+/// format sans lui donner sa branche de conversion referait choisir une configuration qu'on
+/// refuse ensuite de streamer — exactement le bug que `choisir_configuration` corrige.
+fn format_gere(format: cpal::SampleFormat) -> bool {
+    matches!(
+        format,
+        cpal::SampleFormat::F32
+            | cpal::SampleFormat::I16
+            | cpal::SampleFormat::U16
+            | cpal::SampleFormat::U8
+    )
+}
+
+/// Choisit, parmi les plages proposees, celle qui evite une conversion — en ne considerant QUE
+/// les formats qu'on sait effectivement convertir.
+///
+/// ⛔ **Corrige un vrai echec, trouve en dictant pour de vrai et pas en relecture** : la version
+/// precedente prenait la PREMIERE plage mono a 16 kHz venue, sans regarder son format. Un
+/// microphone qui n'expose ce mono 16 kHz qu'en U8 (8 bits) faisait choisir cette configuration,
+/// que `demarrer` refusait ensuite de streamer — « Format audio non pris en charge : U8 », a
+/// CHAQUE appui du raccourci, sans qu'aucun test ne l'ait vu puisqu'aucun test ne tourne contre
+/// un vrai peripherique. Filtrer le format AVANT de retenir la plage « ideale » evite de refaire
+/// la meme erreur sur un futur format qu'on ne gere pas (I8, I24, I32...).
+///
+/// Fonction PURE, testable sans carte son : `cpal::SupportedStreamConfigRange` se construit sans
+/// rien ouvrir (`::new`), ce qui permet de rejouer ce bug sans microphone U8 sous la main.
+fn choisir_configuration(
+    plages: impl Iterator<Item = cpal::SupportedStreamConfigRange>,
+) -> Option<cpal::SupportedStreamConfig> {
+    let mut defaut_possible = None;
+    for plage in plages {
+        if !format_gere(plage.sample_format()) {
+            continue;
+        }
+        // Mono a 16 kHz exactement : le cas ideal, aucune conversion ensuite.
+        if plage.channels() == 1
+            && plage.min_sample_rate() <= TAUX_MOTEUR
+            && plage.max_sample_rate() >= TAUX_MOTEUR
+        {
+            return Some(plage.with_sample_rate(TAUX_MOTEUR));
+        }
+        defaut_possible.get_or_insert(plage);
+    }
+    // A defaut d'un mono 16 kHz, au moins une plage dans un format GERE : mieux que l'echec sur
+    // la toute premiere plage venue, qui pourrait etre dans un format qu'on ne sait pas streamer.
+    defaut_possible.map(cpal::SupportedStreamConfigRange::with_max_sample_rate)
+}
+
 /// Choisit une configuration d'entree, en privilegiant celle qui evite une conversion.
 fn configuration_preferee(
     peripherique: &cpal::Device,
@@ -200,19 +267,14 @@ fn configuration_preferee(
         .supported_input_configs()
         .map_err(|erreur| format!("Microphone illisible : {erreur}"))?;
 
-    let mut defaut_possible = None;
-    for plage in disponibles {
-        // Mono a 16 kHz exactement : le cas ideal, aucune conversion ensuite.
-        if plage.channels() == 1
-            && plage.min_sample_rate() <= TAUX_MOTEUR
-            && plage.max_sample_rate() >= TAUX_MOTEUR
-        {
-            return Ok(plage.with_sample_rate(TAUX_MOTEUR));
-        }
-        defaut_possible.get_or_insert(plage);
+    if let Some(configuration) = choisir_configuration(disponibles) {
+        return Ok(configuration);
     }
 
-    // Sinon on prend ce que la carte propose par defaut et on convertira.
+    // ⚠️ Aucune plage dans un format gere : repli sur le defaut de la carte. `demarrer` peut
+    // encore le refuser si meme ce defaut n'est dans aucun format gere — cas rarissime qu'on
+    // n'invente pas de solution pour tant qu'il ne s'est jamais produit, mais le message reste
+    // honnete sur ce qui a ete essaye plutot que de masquer l'echec.
     peripherique
         .default_input_config()
         .map_err(|erreur| format!("Microphone sans configuration utilisable : {erreur}"))
@@ -701,5 +763,77 @@ mod tests {
         assert_eq!(niveau_moyen(&[]), 0.0);
         assert_eq!(niveau_moyen(&[0.0, 0.0]), 0.0);
         assert!(niveau_moyen(&[0.5, -0.5]) > 0.4);
+    }
+
+    /// Construit une plage, sans rien ouvrir : c'est tout ce qu'il faut pour rejouer un
+    /// peripherique sans microphone U8 sous la main.
+    fn plage(
+        canaux: u16,
+        taux_min: u32,
+        taux_max: u32,
+        format: cpal::SampleFormat,
+    ) -> cpal::SupportedStreamConfigRange {
+        cpal::SupportedStreamConfigRange::new(
+            canaux,
+            // ⚠️ `SampleRate` est un alias de `u32` en cpal 0.18, pas un tuple : pas de `(...)`.
+            taux_min,
+            taux_max,
+            cpal::SupportedBufferSize::Range {
+                min: 64,
+                max: 4_096,
+            },
+            format,
+        )
+    }
+
+    #[test]
+    fn tous_les_formats_geres_sont_reellement_geres() {
+        // ⛔ Filet contre une regression du genre de celle ci-dessous : si un format est ajoute a
+        // `format_gere` sans sa branche de conversion dans `demarrer`, ce test ne l'attrape pas
+        // (il ne construit pas de flux), mais au moins les quatre formats geres aujourd'hui sont
+        // nommes ici et pas seulement dans le code.
+        assert!(format_gere(cpal::SampleFormat::F32));
+        assert!(format_gere(cpal::SampleFormat::I16));
+        assert!(format_gere(cpal::SampleFormat::U16));
+        assert!(format_gere(cpal::SampleFormat::U8));
+        assert!(!format_gere(cpal::SampleFormat::I8));
+        assert!(!format_gere(cpal::SampleFormat::I32));
+    }
+
+    #[test]
+    fn un_mono_16khz_en_u8_n_est_plus_choisi_a_tort() {
+        // ⛔ **Le bug exact, rejoue sans microphone.** Avant le correctif, cette plage aurait ete
+        // retournee telle quelle par la recherche du « cas ideal » : mono, couvre 16 kHz — sans
+        // jamais regarder qu'elle est en U8, qu'aucune branche de `demarrer` d'alors ne savait
+        // streamer. Resultat reel observe : « Format audio non pris en charge : U8 », a chaque
+        // appui du raccourci. Desormais U8 est GERE, donc ce test prouve surtout qu'il est bien
+        // choisi plutot qu'ignore — la regression qu'il visait a l'origine est couverte par le
+        // suivant, avec un format qu'on ne gere toujours pas.
+        let plages = vec![plage(1, 8_000, 48_000, cpal::SampleFormat::U8)];
+        let choisie = choisir_configuration(plages.into_iter()).expect("une configuration");
+        assert_eq!(choisie.sample_format(), cpal::SampleFormat::U8);
+        assert_eq!(choisie.sample_rate(), TAUX_MOTEUR);
+    }
+
+    #[test]
+    fn un_format_non_gere_n_est_jamais_choisi_meme_mono_16khz() {
+        // ⛔ Le vrai filet contre la classe de bug : un format qu'on ne sait PAS convertir
+        // (I24, ici) ne doit JAMAIS ressortir de `choisir_configuration`, meme s'il est le seul a
+        // proposer du mono 16 kHz. Une plage dans un format gere, moins ideale (stereo, 48 kHz),
+        // doit lui etre preferee — mieux convertir que echouer.
+        let plages = vec![
+            plage(1, 8_000, 48_000, cpal::SampleFormat::I24),
+            plage(2, 44_100, 48_000, cpal::SampleFormat::F32),
+        ];
+        let choisie = choisir_configuration(plages.into_iter()).expect("une configuration");
+        assert_eq!(choisie.sample_format(), cpal::SampleFormat::F32);
+    }
+
+    #[test]
+    fn aucune_plage_geree_rend_aucune_configuration() {
+        // ⛔ Le repli existe ensuite cote appelant (`default_input_config`) : cette fonction ne
+        // doit pas inventer un choix a partir de rien.
+        let plages = vec![plage(1, 8_000, 48_000, cpal::SampleFormat::I24)];
+        assert!(choisir_configuration(plages.into_iter()).is_none());
     }
 }

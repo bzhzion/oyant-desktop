@@ -7,6 +7,20 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Corrigé
+
+- ⛔ **La dictée échouait sur certains microphones avec « Format audio non pris en charge : U8 »,
+  à chaque appui du raccourci.** `configuration_preferee` prenait la PREMIÈRE plage mono couvrant
+  16 kHz, sans jamais regarder son format d'échantillon. Un micro qui n'expose ce mono 16 kHz
+  qu'en U8 (8 bits) faisait donc choisir une configuration que `demarrer` refusait ensuite de
+  streamer, puisqu'il ne gérait que F32/I16/U16. **Trouvé en dictant pour de vrai**, pas en
+  relecture. Deux correctifs : U8 est désormais géré (conversion triviale, origine à 128), et
+  surtout `choisir_configuration` — extraite en fonction pure, testable sans carte son via
+  `cpal::SupportedStreamConfigRange::new` — ne retient plus jamais une plage dont le format n'est
+  pas géré, même si elle est « idéale » par ailleurs. Ça évite de refaire la même erreur sur un
+  futur format qu'on ne gère toujours pas (I8, I24, I32...), qui sera alors ignoré au profit
+  d'une plage moins idéale mais convertible, plutôt que de faire échouer toute la dictée.
+
 ### Ajouté
 
 - **Le protocole d'appairage passe en version 2 : le téléphone prouve posséder sa clé, il ne se
