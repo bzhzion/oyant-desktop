@@ -207,6 +207,74 @@ pub fn decider(bonjour: &Bonjour, contexte: &Contexte, consentement: Consentemen
     }
 }
 
+// ── Apres `Bienvenue` : la premiere chose qu'on peut demander ───────────────────────────────
+//
+// ⚠️ Un appareil qui se contente de s'appairer (l'ecran « Mon ordinateur » du telephone) ferme la
+// connexion des qu'il a son `Bienvenue`, et c'est le cas NORMAL : aucune commande n'arrive alors,
+// et ce n'est pas une erreur. Voir `serveur::lire_commande_facultative`, qui distingue ce silence
+// d'un vrai probleme.
+
+/// Taille maximale d'un enregistrement envoye par le telephone.
+///
+/// ⚠️ **Verifiee AVANT de recevoir le moindre octet** : le telephone l'annonce dans `Commande`, ce
+/// qui permet de refuser un fichier deraisonnable sans avoir a le recevoir en entier d'abord.
+/// ~200 Mio couvre plus d'une heure a 16 kHz mono 16 bits (le format que le telephone envoie deja
+/// pour sa propre transcription sur l'appareil), avec de la marge.
+pub const TAILLE_ENREGISTREMENT_MAX: u64 = 200 * 1024 * 1024;
+
+/// Ce qu'un appareil appaire peut demander, une fois `Bienvenue` reçu.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Commande {
+    /// Transcrire un enregistrement deja fait sur le telephone. ⚠️ L'audio suit en un message
+    /// BINAIRE separe, envoye juste apres celui-ci : ce message-ci ne fait qu'annoncer sa taille.
+    TranscrireEnregistrement { taille_octets: u64 },
+}
+
+/// Ce que l'hote repond a une commande.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReponseCommande {
+    Transcription { texte: String },
+    Refus { motif: MotifCommande },
+}
+
+/// Pourquoi une commande a ete refusee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MotifCommande {
+    /// La commande elle-meme est illisible, ou ses bornes sont depassees.
+    MessageInvalide,
+    /// La taille annoncee depasse `TAILLE_ENREGISTREMENT_MAX`, ou vaut zero.
+    FichierTropGros,
+    /// Les octets reçus ne sont pas un WAV valide, ou ne correspondent pas a la taille annoncee.
+    FormatInvalide,
+    /// Aucun moteur ou modele n'est configure sur cet ordinateur.
+    MoteurIndisponible,
+    /// Le moteur a echoue sur ce fichier precis.
+    EchecTranscription,
+}
+
+/// Verifie la taille ANNONCEE d'un enregistrement, avant d'en recevoir le moindre octet.
+///
+/// Fonction PURE : aucune raison de recevoir un fichier pour decouvrir qu'on va le refuser.
+pub fn verifier_taille_annoncee(taille_octets: u64) -> Option<MotifCommande> {
+    if taille_octets == 0 || taille_octets > TAILLE_ENREGISTREMENT_MAX {
+        Some(MotifCommande::FichierTropGros)
+    } else {
+        None
+    }
+}
+
+/// Verifie la forme MINIMALE d'un fichier WAV : l'en-tete RIFF/WAVE, rien de plus.
+///
+/// ⚠️ **Ne verifie PAS le sous-format** (PCM, 16 kHz, mono) : `whisper-cli` le fait lui-meme et le
+/// dit clairement s'il refuse, dupliquer ce parsing ici n'apporterait rien de plus qu'un second
+/// endroit a desynchroniser du premier.
+pub fn est_wav_valide(octets: &[u8]) -> bool {
+    octets.len() >= 44 && &octets[0..4] == b"RIFF" && &octets[8..12] == b"WAVE"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,5 +511,44 @@ mod tests {
                 motif: Motif::MessageInvalide
             })
         );
+    }
+
+    #[test]
+    fn une_taille_annoncee_raisonnable_passe() {
+        assert_eq!(verifier_taille_annoncee(1), None);
+        assert_eq!(verifier_taille_annoncee(TAILLE_ENREGISTREMENT_MAX), None);
+    }
+
+    #[test]
+    fn une_taille_annoncee_nulle_ou_demesuree_est_refusee() {
+        // ⛔ Zero n'est pas un cas limite anodin : un fichier de zero octet ne contient aucun
+        // en-tete WAV possible, autant le refuser avant meme d'ouvrir une connexion pour rien.
+        assert_eq!(
+            verifier_taille_annoncee(0),
+            Some(MotifCommande::FichierTropGros)
+        );
+        assert_eq!(
+            verifier_taille_annoncee(TAILLE_ENREGISTREMENT_MAX + 1),
+            Some(MotifCommande::FichierTropGros)
+        );
+    }
+
+    #[test]
+    fn un_wav_minimal_est_valide() {
+        // Le plus petit en-tete RIFF/WAVE possible, sans aucune donnee derriere : la fonction ne
+        // verifie que l'en-tete, pas la presence de son.
+        let mut octets = vec![0u8; 44];
+        octets[0..4].copy_from_slice(b"RIFF");
+        octets[8..12].copy_from_slice(b"WAVE");
+        assert!(est_wav_valide(&octets));
+    }
+
+    #[test]
+    fn un_fichier_sans_en_tete_wav_est_refuse() {
+        assert!(!est_wav_valide(
+            b"pas du tout un wav, juste du texte avec assez d'octets ici"
+        ));
+        assert!(!est_wav_valide(&[0u8; 43])); // un octet sous la taille minimale de l'en-tete
+        assert!(!est_wav_valide(b""));
     }
 }

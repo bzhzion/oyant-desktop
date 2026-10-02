@@ -40,6 +40,24 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
   à cette largeur et pas seulement à la largeur par défaut : corrigée pour reprendre le même
   filet fin et accent que le reste de l'application.
 
+### Ajouté
+
+- **Le téléphone peut envoyer un enregistrement existant à transcrire par l'ordinateur.** Jusqu'ici
+  l'appairage ne servait qu'à autoriser un téléphone, sans rien y faire transiter. Après
+  `Bienvenue`, la connexion continue désormais en option : le téléphone annonce la taille du
+  fichier, l'ordinateur la refuse si elle dépasse 200 Mio (avant de lire le moindre octet, pas
+  après), puis reçoit les octets en trame binaire, les écrit dans un fichier temporaire et les
+  transcrit avec les réglages lus au moment même de la demande (modèle, langue, cœurs, marge,
+  vocabulaire), pas un instantané pris au démarrage du serveur.
+
+  ⚠️ **Aucune écriture dans le presse-papiers ni injection au curseur** : contrairement à la
+  dictée locale, une demande venue du téléphone n'a aucune fenêtre active à cibler. Le texte
+  rejoint simplement l'historique et repart vers le téléphone en réponse.
+
+  ⚠️ **Le WAV n'est jamais reconverti** : l'app iPhone convertit déjà tout enregistrement (micro,
+  import, partage) en PCM 16 kHz mono pour son propre moteur embarqué (whisper.rn), donc c'est
+  exactement le format que `whisper-cli` attend côté ordinateur. Aucun traitement intermédiaire.
+
 ### Corrigé
 
 - ⛔ **Un appairage accepté n'était jamais écrit sur le disque, seulement retenu en mémoire.**

@@ -16,8 +16,9 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_rustls::TlsAcceptor;
 
 use crate::appairage::{
-    Bonjour, Consentement, Contexte, Motif, Preuve, Reponse, decider, verifier_entree,
-    verifier_preuve,
+    Bonjour, Commande, Consentement, Contexte, Motif, MotifCommande, Preuve, Reponse,
+    ReponseCommande, decider, est_wav_valide, verifier_entree, verifier_preuve,
+    verifier_taille_annoncee,
 };
 use crate::reseau::{Appaires, AppareilAppaire, DELAI_APPAIRAGE_S, IdentiteTls, defi};
 
@@ -239,7 +240,174 @@ async fn servir_une_connexion(
     }
 
     repondre(&mut ws, &finale).await;
+
+    // ⚠️ Seul un appareil qui vient d'etre dit « bienvenue » peut demander quoi que ce soit
+    // ensuite. Un refus ferme la connexion sans jamais lire un message de plus.
+    if matches!(finale, Reponse::Bienvenue { .. }) {
+        match lire_commande_facultative(&mut ws).await {
+            // ⛔ Le cas NORMAL : l'ecran « Mon ordinateur » du telephone ferme la connexion des
+            // qu'il a son `Bienvenue`, sans rien demander de plus. Rien a journaliser.
+            None => {}
+            Some(Err(message)) => eprintln!("appairage : commande illisible : {message}"),
+            Some(Ok(commande)) => {
+                let reponse = traiter_commande(&mut ws, commande).await;
+                repondre(&mut ws, &reponse).await;
+            }
+        }
+    }
+
     Ok(())
+}
+
+/// Lit une COMMANDE facultative, apres `Bienvenue`.
+///
+/// ⚠️ **Contrairement a `lire_message`, une connexion qui se ferme ICI n'est PAS une erreur** :
+/// c'est le cas normal d'un appairage qui ne demandait rien de plus. `None` le distingue d'un
+/// `Some(Err(_))`, qui signale un VRAI probleme (message illisible, ou non textuel).
+async fn lire_commande_facultative<S>(
+    ws: &mut tokio_tungstenite::WebSocketStream<S>,
+) -> Option<Result<Commande, String>>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let attente = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        futures_util::StreamExt::next(ws),
+    )
+    .await;
+    // Delai ou connexion fermee proprement : dans les deux cas, rien a faire et ce n'est pas une
+    // erreur. `?` sur l'`Option` interne gere le second cas (`None` = flux termine).
+    let message = attente.ok()??;
+
+    let texte = match message {
+        Ok(m) => match m.into_text() {
+            Ok(t) => t,
+            Err(e) => return Some(Err(format!("message non textuel : {e}"))),
+        },
+        Err(e) => return Some(Err(format!("message illisible : {e}"))),
+    };
+    Some(serde_json::from_str::<Commande>(&texte).map_err(|_| "commande non reconnue".to_string()))
+}
+
+/// Compteur de requetes reseau, pour un nom de fichier temporaire UNIQUE par connexion.
+///
+/// ⚠️ **Ni `std::process::id()` seul (deja utilise par la dictee locale au clavier) ni un nom
+/// fixe** : deux transcriptions reseau simultanees, ou une reseau en meme temps qu'une dictee
+/// locale, ecraseraient alors le MEME fichier temporaire pendant que l'autre l'utilise encore.
+fn prochain_identifiant_temporaire() -> u64 {
+    static COMPTEUR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    COMPTEUR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Execute une commande reçue apres `Bienvenue`, et rend la reponse a transmettre au telephone.
+async fn traiter_commande<S>(
+    ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    commande: Commande,
+) -> ReponseCommande
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    match commande {
+        Commande::TranscrireEnregistrement { taille_octets } => {
+            transcrire_enregistrement_recu(ws, taille_octets).await
+        }
+    }
+}
+
+/// Reçoit un enregistrement WAV et le transcrit avec le moteur et le modele CONFIGURES sur cet
+/// ordinateur, exactement comme pour une dictee au clavier.
+///
+/// ⚠️ **Les reglages sont relus ICI, pas transmis depuis le demarrage du serveur** : une
+/// configuration changee entre-temps (modele, langue, vocabulaire) doit s'appliquer, meme principe
+/// que `enregistrer()` qui relit le disque avant d'ecrire, cote interface.
+///
+/// ⛔ **N'injecte RIEN au curseur et ne touche pas le presse-papiers.** Contrairement a la dictee
+/// tenue au clavier, il n'y a ici aucune fenetre que l'utilisateur regarde au moment ou la demande
+/// arrive : taper dans celle qui a le focus par hasard serait taper dans la mauvaise application.
+/// Le texte est seulement renvoye au telephone, et ajoute a l'historique comme toute dictee.
+async fn transcrire_enregistrement_recu<S>(
+    ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    taille_octets: u64,
+) -> ReponseCommande
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    if let Some(motif) = verifier_taille_annoncee(taille_octets) {
+        return ReponseCommande::Refus { motif };
+    }
+
+    // ⚠️ Delai genereux : un enregistrement de plusieurs dizaines de Mio sur un wifi ordinaire
+    // peut prendre un vrai moment, contrairement aux messages de l'appairage qui ne pesent que
+    // quelques octets.
+    let attente = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        futures_util::StreamExt::next(ws),
+    )
+    .await;
+    let Ok(Some(Ok(message))) = attente else {
+        return ReponseCommande::Refus {
+            motif: MotifCommande::MessageInvalide,
+        };
+    };
+    let octets = match message {
+        tokio_tungstenite::tungstenite::Message::Binary(o) => o,
+        // ⛔ Un texte, une image fermee ou un ping la ou un enregistrement etait annonce : ce
+        // n'est pas ce qui a ete annonce, refus franc plutot que d'essayer de deviner.
+        _ => {
+            return ReponseCommande::Refus {
+                motif: MotifCommande::MessageInvalide,
+            };
+        }
+    };
+
+    if octets.len() as u64 != taille_octets || !est_wav_valide(&octets) {
+        return ReponseCommande::Refus {
+            motif: MotifCommande::FormatInvalide,
+        };
+    }
+
+    let reglages = crate::reglages::lire_sans_application();
+    let Ok(outils) = crate::dictee::resoudre(&reglages.modele) else {
+        return ReponseCommande::Refus {
+            motif: MotifCommande::MoteurIndisponible,
+        };
+    };
+
+    let chemin = std::env::temp_dir().join(format!(
+        "oyant-reseau-{}.wav",
+        prochain_identifiant_temporaire()
+    ));
+    if std::fs::write(&chemin, &octets).is_err() {
+        return ReponseCommande::Refus {
+            motif: MotifCommande::FormatInvalide,
+        };
+    }
+
+    let resultat = crate::moteur::transcrire(
+        &outils.executable,
+        &outils.modele,
+        &chemin,
+        &reglages.langue,
+        reglages.fils,
+        reglages.temperature,
+        crate::moteur::prompt_des_reglages(&reglages).as_deref(),
+    );
+    let _ = std::fs::remove_file(&chemin);
+
+    match resultat {
+        Ok(transcription) => {
+            let brut = transcription.texte.trim().to_string();
+            // ⚠️ Comme pour la dictee locale : c'est le texte BRUT qui a une valeur de trace,
+            // substitutions et majuscules sont des choix d'affichage qui n'entrent pas dedans.
+            if !brut.is_empty() {
+                let _ = crate::historique::ajouter(&brut, reglages.taille_historique);
+            }
+            ReponseCommande::Transcription { texte: brut }
+        }
+        Err(_) => ReponseCommande::Refus {
+            motif: MotifCommande::EchecTranscription,
+        },
+    }
 }
 
 /// Demande a l'utilisateur, et traite tout ce qui n'est pas un « oui » franc comme un refus.
@@ -271,8 +439,12 @@ async fn demander(
     }
 }
 
-async fn repondre<S>(ws: &mut tokio_tungstenite::WebSocketStream<S>, reponse: &Reponse)
-where
+/// ⚠️ Generique sur `Reponse` ET `ReponseCommande` : les deux se serialisent en JSON de la meme
+/// facon, et dupliquer cette fonction pour chacune n'aurait rien ajoute.
+async fn repondre<S, R: serde::Serialize>(
+    ws: &mut tokio_tungstenite::WebSocketStream<S>,
+    reponse: &R,
+) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     if let Ok(texte) = serde_json::to_string(reponse) {
@@ -596,17 +768,13 @@ mod tests {
     /// `servir_une_connexion`). Aucun test actuel n'a besoin d'inspecter son contenu : le code que
     /// l'utilisateur compare est verifie via le canal `demandes`, pas via ce que le telephone
     /// affiche.
-    async fn dialoguer(
-        adresse: std::net::SocketAddr,
-        certificat_der: Vec<u8>,
-        nom: &str,
-        paire: &ring::signature::Ed25519KeyPair,
-        cle_publique: &str,
-        version: &str,
-    ) -> Reponse {
-        use base64::Engine;
-        let decodeur = base64::engine::general_purpose::STANDARD;
+    /// Type du flux qu'un client de test obtient : TLS epingle par-dessus TCP, WebSocket par-dessus.
+    type FluxTest =
+        tokio_tungstenite::WebSocketStream<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
 
+    /// Ouvre la connexion TLS epinglee + WebSocket, SANS rien envoyer : partagee par `dialoguer`
+    /// et par les tests qui doivent garder la main sur le flux apres `Bienvenue`.
+    async fn tls_connecter(adresse: std::net::SocketAddr, certificat_der: Vec<u8>) -> FluxTest {
         let config = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(Epingle(certificat_der)))
@@ -615,21 +783,41 @@ mod tests {
         let tcp = tokio::net::TcpStream::connect(adresse).await.expect("tcp");
         let nom_serveur = rustls::pki_types::ServerName::try_from("oyant.local").expect("nom");
         let tls = connecteur.connect(nom_serveur, tcp).await.expect("tls");
-        let (mut ws, _) = tokio_tungstenite::client_async("ws://oyant.local/", tls)
+        tokio_tungstenite::client_async("ws://oyant.local/", tls)
             .await
-            .expect("websocket");
+            .expect("websocket")
+            .0
+    }
 
-        let bonjour =
-            serde_json::json!({ "version": version, "nom": nom, "cle_publique": cle_publique });
+    async fn envoyer_json(ws: &mut FluxTest, valeur: serde_json::Value) {
         futures_util::SinkExt::send(
-            &mut ws,
-            tokio_tungstenite::tungstenite::Message::Text(bonjour.to_string()),
+            ws,
+            tokio_tungstenite::tungstenite::Message::Text(valeur.to_string()),
         )
         .await
-        .expect("envoi bonjour");
+        .expect("envoi");
+    }
+
+    /// Mene le handshake jusqu'a une reponse TERMINALE (`Bienvenue`/`Refus`), en signant chaque
+    /// defi recu. Partagee par `dialoguer` et `dialoguer_jusqu_a_bienvenue`.
+    async fn handshake(
+        ws: &mut FluxTest,
+        nom: &str,
+        paire: &ring::signature::Ed25519KeyPair,
+        cle_publique: &str,
+        version: &str,
+    ) -> Reponse {
+        use base64::Engine;
+        let decodeur = base64::engine::general_purpose::STANDARD;
+
+        envoyer_json(
+            ws,
+            serde_json::json!({ "version": version, "nom": nom, "cle_publique": cle_publique }),
+        )
+        .await;
 
         loop {
-            let recu = futures_util::StreamExt::next(&mut ws)
+            let recu = futures_util::StreamExt::next(ws)
                 .await
                 .expect("réponse")
                 .expect("trame");
@@ -639,18 +827,43 @@ mod tests {
                 Reponse::Defi { defi } => {
                     let defi_octets = decodeur.decode(&defi).expect("defi base64");
                     let signature = decodeur.encode(paire.sign(&defi_octets));
-                    let preuve = serde_json::json!({ "signature": signature });
-                    futures_util::SinkExt::send(
-                        &mut ws,
-                        tokio_tungstenite::tungstenite::Message::Text(preuve.to_string()),
-                    )
-                    .await
-                    .expect("envoi preuve");
+                    envoyer_json(ws, serde_json::json!({ "signature": signature })).await;
                 }
                 Reponse::AutorisationDemandee { .. } => continue,
                 terminale => return terminale,
             }
         }
+    }
+
+    async fn dialoguer(
+        adresse: std::net::SocketAddr,
+        certificat_der: Vec<u8>,
+        nom: &str,
+        paire: &ring::signature::Ed25519KeyPair,
+        cle_publique: &str,
+        version: &str,
+    ) -> Reponse {
+        let mut ws = tls_connecter(adresse, certificat_der).await;
+        handshake(&mut ws, nom, paire, cle_publique, version).await
+    }
+
+    /// Comme `dialoguer`, mais s'ARRETE a `Bienvenue` et REND la connexion encore ouverte : c'est
+    /// ce qu'il faut pour envoyer une commande juste apres, ce que `dialoguer` ne permet pas
+    /// puisqu'il referme tout en rendant sa reponse.
+    async fn dialoguer_jusqu_a_bienvenue(
+        adresse: std::net::SocketAddr,
+        certificat_der: Vec<u8>,
+        nom: &str,
+        paire: &ring::signature::Ed25519KeyPair,
+        cle_publique: &str,
+    ) -> FluxTest {
+        let mut ws = tls_connecter(adresse, certificat_der).await;
+        let reponse = handshake(&mut ws, nom, paire, cle_publique, VERSION_PROTOCOLE).await;
+        assert!(
+            matches!(reponse, Reponse::Bienvenue { .. }),
+            "attendu Bienvenue avant d'envoyer une commande, obtenu {reponse:?}"
+        );
+        ws
     }
 
     /// Monte un serveur sur un port libre et rend de quoi lui parler.
@@ -880,6 +1093,164 @@ mod tests {
         assert!(
             demandes.try_recv().is_err(),
             "l'utilisateur ne doit pas être sollicité pour une version incompatible"
+        );
+    }
+
+    // ── Transcrire un enregistrement envoye apres l'appairage ───────────────────────────────
+
+    /// Monte un serveur de test dont l'appareil rendu est DEJA appaire : ⛔ sans ca, un appareil
+    /// inconnu declenche la demande de consentement humain, et `_demandes` ignoree dans les tests
+    /// ci-dessous la ferait tomber sur `Refus { motif: SansReponse }` avant meme d'atteindre la
+    /// commande qu'on veut eprouver. C'est precisement le piege dans lequel ces quatre tests sont
+    /// tombes au premier essai.
+    async fn serveur_avec_appareil_deja_appaire() -> (
+        std::net::SocketAddr,
+        Vec<u8>,
+        String,
+        ring::signature::Ed25519KeyPair,
+    ) {
+        let (cle_publique, paire) = paire_de_test();
+        let mut appaires_init = Appaires::default();
+        appaires_init.ajouter(AppareilAppaire {
+            empreinte: empreinte(cle_publique.as_bytes()),
+            nom: "iPhone".into(),
+            appaire_le: "2026-09-25T20:00:00Z".into(),
+        });
+        let (adresse, der, _demandes) = serveur_de_test(Arc::new(Mutex::new(appaires_init))).await;
+        (adresse, der, cle_publique, paire)
+    }
+
+    /// Un en-tete WAV minimal valide, sans aucun son derriere : suffisant pour passer la
+    /// verification de forme, pas pour obtenir une vraie transcription.
+    fn wav_minimal() -> Vec<u8> {
+        let mut octets = vec![0u8; 44];
+        octets[0..4].copy_from_slice(b"RIFF");
+        octets[8..12].copy_from_slice(b"WAVE");
+        octets
+    }
+
+    async fn lire_reponse_commande(ws: &mut FluxTest) -> ReponseCommande {
+        let recu = futures_util::StreamExt::next(ws)
+            .await
+            .expect("une reponse de commande")
+            .expect("trame");
+        serde_json::from_str(&recu.into_text().expect("texte")).expect("json")
+    }
+
+    #[tokio::test]
+    async fn une_taille_annoncee_demesuree_est_refusee_sans_rien_lire_de_plus() {
+        let (adresse, der, cle_publique, paire) = serveur_avec_appareil_deja_appaire().await;
+        let mut ws =
+            dialoguer_jusqu_a_bienvenue(adresse, der, "iPhone", &paire, &cle_publique).await;
+
+        envoyer_json(
+            &mut ws,
+            serde_json::json!({ "type": "transcrire_enregistrement", "taille_octets": crate::appairage::TAILLE_ENREGISTREMENT_MAX + 1 }),
+        )
+        .await;
+
+        // ⛔ Le point du test : aucun octet de donnees n'est envoye APRES l'annonce, et pourtant
+        // une reponse arrive quand meme. Si le serveur attendait de recevoir le fichier avant de
+        // verifier sa taille, cette connexion resterait bloquee jusqu'au delai, pas refusee tout
+        // de suite.
+        assert_eq!(
+            lire_reponse_commande(&mut ws).await,
+            ReponseCommande::Refus {
+                motif: MotifCommande::FichierTropGros
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn une_taille_annoncee_qui_ne_correspond_pas_est_refusee() {
+        let (adresse, der, cle_publique, paire) = serveur_avec_appareil_deja_appaire().await;
+        let mut ws =
+            dialoguer_jusqu_a_bienvenue(adresse, der, "iPhone", &paire, &cle_publique).await;
+
+        let wav = wav_minimal();
+        envoyer_json(
+            &mut ws,
+            // ⛔ Annonce DELIBEREMENT une taille differente de ce qui va vraiment suivre.
+            serde_json::json!({ "type": "transcrire_enregistrement", "taille_octets": (wav.len() + 1) as u64 }),
+        )
+        .await;
+        futures_util::SinkExt::send(
+            &mut ws,
+            tokio_tungstenite::tungstenite::Message::Binary(wav),
+        )
+        .await
+        .expect("envoi audio");
+
+        assert_eq!(
+            lire_reponse_commande(&mut ws).await,
+            ReponseCommande::Refus {
+                motif: MotifCommande::FormatInvalide
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn des_octets_qui_ne_sont_pas_un_wav_sont_refuses() {
+        let (adresse, der, cle_publique, paire) = serveur_avec_appareil_deja_appaire().await;
+        let mut ws =
+            dialoguer_jusqu_a_bienvenue(adresse, der, "iPhone", &paire, &cle_publique).await;
+
+        let n_importe_quoi = vec![0u8; 100];
+        envoyer_json(
+            &mut ws,
+            serde_json::json!({ "type": "transcrire_enregistrement", "taille_octets": 100u64 }),
+        )
+        .await;
+        futures_util::SinkExt::send(
+            &mut ws,
+            tokio_tungstenite::tungstenite::Message::Binary(n_importe_quoi),
+        )
+        .await
+        .expect("envoi audio");
+
+        assert_eq!(
+            lire_reponse_commande(&mut ws).await,
+            ReponseCommande::Refus {
+                motif: MotifCommande::FormatInvalide
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn un_wav_valide_de_taille_annoncee_atteint_la_transcription() {
+        let (adresse, der, cle_publique, paire) = serveur_avec_appareil_deja_appaire().await;
+        let mut ws =
+            dialoguer_jusqu_a_bienvenue(adresse, der, "iPhone", &paire, &cle_publique).await;
+
+        let wav = wav_minimal();
+        envoyer_json(
+            &mut ws,
+            serde_json::json!({ "type": "transcrire_enregistrement", "taille_octets": wav.len() as u64 }),
+        )
+        .await;
+        futures_util::SinkExt::send(
+            &mut ws,
+            tokio_tungstenite::tungstenite::Message::Binary(wav),
+        )
+        .await
+        .expect("envoi audio");
+
+        // ⚠️ **Pas d'assertion sur UNE reponse precise** : au-dela de la forme du WAV, la suite
+        // depend du moteur et du modele reellement CONFIGURES sur la machine qui fait tourner ce
+        // test -- absents sur une CI fraiche, presents sur un poste qui dicte deja au quotidien.
+        // Ce qui compte ici, c'est que le protocole reseau ait ete traverse jusqu'au bout SANS
+        // etre refuse pour une raison de FORME (taille, format) : la reponse doit donc etre soit
+        // une vraie transcription, soit un refus faute de MOTEUR configure, jamais les refus de
+        // forme qui, eux, se produisent AVANT meme de regarder le moteur.
+        let reponse = lire_reponse_commande(&mut ws).await;
+        assert!(
+            !matches!(
+                reponse,
+                ReponseCommande::Refus {
+                    motif: MotifCommande::FichierTropGros | MotifCommande::FormatInvalide
+                }
+            ),
+            "un WAV valide de la bonne taille ne doit jamais echouer sur sa FORME : {reponse:?}"
         );
     }
 }
