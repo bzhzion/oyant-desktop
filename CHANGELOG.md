@@ -7,6 +7,8 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 ### Modifié
 
 - **L'écran de réglages passe d'une seule liste qui défile à six onglets.** La page avait
