@@ -42,6 +42,45 @@ pub struct Modele {
     pub empreinte: &'static str,
     /// Ce qu'on en dit a l'utilisateur pour qu'il choisisse sans connaitre le domaine.
     pub description: &'static str,
+    /// Le programme qui sait lire ce modele.
+    pub famille: Famille,
+}
+
+/// Deux familles de modeles, deux programmes, et surtout deux jeux d'options.
+///
+/// ⛔ **Parakeet n'est pas un Whisper plus rapide, c'est un autre moteur.** `parakeet-cli` n'a ni
+/// `-l`, ni `--prompt`, ni `--temperature` : lui passer les options de Whisper le ferait echouer,
+/// et les taire sans le dire ferait croire que la langue choisie et le vocabulaire s'appliquent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Famille {
+    Whisper,
+    Parakeet,
+}
+
+/// Les langues que Parakeet v3 sait transcrire, en codes ISO 639-1.
+///
+/// ⚠️ **Relevees sur la fiche du modele chez NVIDIA, pas deduites** : 25 langues europeennes, et
+/// rien d'autre. Le coreen n'y est pas, alors que c'est une langue que le produit propose et
+/// qu'on parle dans le foyer de son auteur. D'ou un refus explicite avant de lancer quoi que ce
+/// soit, plutot qu'un texte phonetique dans une autre langue, tape dans l'application de
+/// l'utilisateur.
+pub const LANGUES_PARAKEET: &[&str] = &[
+    "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hr", "hu", "it", "lt", "lv", "mt",
+    "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk",
+];
+
+impl Famille {
+    /// Cette famille sait-elle transcrire la langue demandee ?
+    ///
+    /// `auto` est toujours accepte : Parakeet detecte seul parmi ses langues, sans option pour
+    /// le lui dire.
+    pub fn connait(self, langue: &str) -> bool {
+        match self {
+            Famille::Whisper => true,
+            Famille::Parakeet => langue == "auto" || LANGUES_PARAKEET.contains(&langue),
+        }
+    }
 }
 
 pub const CATALOGUE: &[Modele] = &[
@@ -53,6 +92,7 @@ pub const CATALOGUE: &[Modele] = &[
         taille: 487_601_967,
         empreinte: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         description: "Le plus rapide, et le plus leger a telecharger. Suffisant pour dicter des phrases courtes.",
+        famille: Famille::Whisper,
     },
     Modele {
         identifiant: "medium",
@@ -62,6 +102,7 @@ pub const CATALOGUE: &[Modele] = &[
         taille: 1_533_763_059,
         empreinte: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
         description: "Le bon compromis entre precision et rapidite pour un usage quotidien.",
+        famille: Famille::Whisper,
     },
     Modele {
         identifiant: "large-v3",
@@ -71,6 +112,22 @@ pub const CATALOGUE: &[Modele] = &[
         taille: 3_095_033_483,
         empreinte: "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
         description: "Le plus precis, mais lourd a telecharger et plus lent a la transcription.",
+        famille: Famille::Whisper,
+    },
+    // ⚠️ **q8_0 et pas f16** : mesure le 2026-10-29 sur trois lecteurs LibriVox en francais,
+    // les deux rendent le MEME texte au caractere pres, et q8_0 pese moitie moins (669 Mo contre
+    // 1,26 Go). Rien a gagner a faire telecharger le double.
+    Modele {
+        identifiant: "parakeet-v3",
+        nom: "Parakeet v3",
+        fichier: "ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+        url: "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main/ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+        taille: 668_757_119,
+        empreinte: "4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e",
+        // ⛔ Les deux limites sont DANS la description, parce que c'est la que se fait le choix :
+        // les decouvrir apres coup, c'est croire que le vocabulaire ou le coreen sont casses.
+        description: "Deux à trois fois plus rapide que Small, souvent plus juste en français. Langues européennes seulement (pas de coréen), sans vocabulaire personnalisé. Calcule sur le processeur, sauf avec une carte NVIDIA.",
+        famille: Famille::Parakeet,
     },
 ];
 
@@ -514,6 +571,48 @@ mod tests {
         }
     }
 
+    /// ⛔ Le coreen est propose par le produit et absent de Parakeet : c'est le cas qui doit etre
+    /// refuse, et qui le serait en silence si la liste des langues etait elargie par erreur.
+    #[test]
+    fn parakeet_refuse_le_coreen_et_accepte_le_francais() {
+        assert!(!Famille::Parakeet.connait("ko"));
+        assert!(Famille::Parakeet.connait("fr"));
+        assert!(Famille::Parakeet.connait("auto"));
+        assert!(Famille::Whisper.connait("ko"));
+    }
+
+    /// Chaque langue que l'interface propose doit avoir un sort decide pour Parakeet, et le seul
+    /// refus attendu aujourd'hui est le coreen. Une langue ajoutee a l'interface fera echouer ce
+    /// test, ce qui oblige a se poser la question au lieu de la decouvrir a la dictee.
+    #[test]
+    fn le_sort_de_chaque_langue_de_l_interface_est_decide() {
+        let interface = fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("src")
+                .join("reglages.ts"),
+        )
+        .expect("reglages.ts lisible");
+        let debut = interface
+            .find("titre: 'Langue'")
+            .expect("le choix de langue");
+        let fin = debut
+            + interface[debut..]
+                .find("aide:")
+                .expect("l'aide qui suit la liste");
+        let bloc = &interface[debut..fin];
+        let mut refusees = Vec::new();
+        for ligne in bloc.lines() {
+            if let Some(reste) = ligne.trim().strip_prefix("['") {
+                let code = reste.split('\'').next().unwrap_or("");
+                if !Famille::Parakeet.connait(code) {
+                    refusees.push(code.to_string());
+                }
+            }
+        }
+        assert_eq!(refusees, vec!["ko".to_string()]);
+    }
+
     #[test]
     fn les_urls_sont_en_https() {
         for modele in CATALOGUE {
@@ -527,7 +626,7 @@ mod tests {
 
     #[test]
     fn un_identifiant_inconnu_ne_rend_rien() {
-        assert!(par_identifiant("parakeet").is_none());
+        assert!(par_identifiant("inconnu").is_none());
         assert!(par_identifiant("small").is_some());
     }
 

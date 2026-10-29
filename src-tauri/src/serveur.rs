@@ -367,7 +367,7 @@ where
     }
 
     let reglages = crate::reglages::lire_sans_application();
-    let Ok(outils) = crate::dictee::resoudre(&reglages.modele) else {
+    let Ok(outils) = crate::dictee::resoudre(&reglages.modele, &reglages.langue) else {
         return ReponseCommande::Refus {
             motif: MotifCommande::MoteurIndisponible,
         };
@@ -383,14 +383,18 @@ where
         };
     }
 
+    let prompt = crate::moteur::prompt_des_reglages(&reglages);
     let resultat = crate::moteur::transcrire(
         &outils.executable,
-        &outils.modele,
-        &chemin,
-        &reglages.langue,
-        reglages.fils,
-        reglages.temperature,
-        crate::moteur::prompt_des_reglages(&reglages).as_deref(),
+        &crate::moteur::Demande {
+            famille: outils.famille,
+            modele: &outils.modele,
+            audio: &chemin,
+            langue: &reglages.langue,
+            fils: reglages.fils,
+            temperature: reglages.temperature,
+            prompt: prompt.as_deref(),
+        },
     );
     let _ = std::fs::remove_file(&chemin);
 

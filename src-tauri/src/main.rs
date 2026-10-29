@@ -209,7 +209,13 @@ fn aide() {
     println!("  With a FILE, transcribes it and prints the text.");
     println!("  Supported audio formats: wav, mp3, ogg, flac.");
     println!();
-    println!("  -m, --model ID      Model to use (small, medium, large-v3)");
+    // ⚠️ Derivee du catalogue : ecrite a la main, cette liste a oublie Parakeet le jour meme
+    // de son ajout.
+    let identifiants: Vec<&str> = modeles::CATALOGUE.iter().map(|m| m.identifiant).collect();
+    println!(
+        "  -m, --model ID      Model to use ({})",
+        identifiants.join(", ")
+    );
     println!("  -l, --language CODE Spoken language, or `auto` to detect it");
     println!("  -o, --output FILE   Write the text to a file instead of standard output");
     println!("  -q, --quiet         Print the text alone, without the summary line");
@@ -239,24 +245,27 @@ fn transcrire(demande: &Demandetranscription) -> Result<(), String> {
     // existe en double, et la copie d'ici ignorait la branche « moteur embarque » : elle annoncait
     // « le moteur n'est pas installe » sur un moteur livre avec le produit. `dictee::resoudre`
     // rend une cause TYPEE, que chacun rend dans sa langue, la ligne de commande parlant anglais.
-    let outils = dictee::resoudre(&modele_id).map_err(|manque| manque.en_anglais())?;
-
     // ⚠️ `clone()` et pas un deplacement : les reglages servent encore plus bas, pour deduire le
     // vocabulaire a donner au moteur.
     let langue = demande
         .langue
         .clone()
         .unwrap_or_else(|| reglages.langue.clone());
+    let outils = dictee::resoudre(&modele_id, &langue).map_err(|manque| manque.en_anglais())?;
     let audio = std::path::PathBuf::from(&demande.fichier);
 
+    let prompt = moteur::prompt_des_reglages(&reglages);
     let resultat = moteur::transcrire(
         &outils.executable,
-        &outils.modele,
-        &audio,
-        &langue,
-        reglages.fils,
-        reglages.temperature,
-        moteur::prompt_des_reglages(&reglages).as_deref(),
+        &moteur::Demande {
+            famille: outils.famille,
+            modele: &outils.modele,
+            audio: &audio,
+            langue: &langue,
+            fils: reglages.fils,
+            temperature: reglages.temperature,
+            prompt: prompt.as_deref(),
+        },
     )?;
 
     match &demande.sortie {

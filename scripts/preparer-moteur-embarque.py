@@ -58,7 +58,16 @@ PREFIXE = "Release/"
 
 # Le jeu minimal. Les `ggml-cpu-*.dll` sont prises par motif : en nommer neuf a la main serait
 # neuf occasions d'en oublier une le jour ou l'amont en ajoute.
-FICHIERS = ["whisper-cli.exe", "whisper.dll", "ggml.dll", "ggml-base.dll"]
+# `parakeet-cli.exe` et `parakeet.dll` (moins d'un mega-octet a eux deux) font que le modele
+# Parakeet marche avec le moteur fourni, sans rien installer de plus.
+FICHIERS = [
+    "whisper-cli.exe",
+    "whisper.dll",
+    "ggml.dll",
+    "ggml-base.dll",
+    "parakeet-cli.exe",
+    "parakeet.dll",
+]
 MOTIF_CPU = "ggml-cpu-"
 
 # L'avis de licence est RECUPERE a la source et jamais reconstitue : un avis legal approximatif

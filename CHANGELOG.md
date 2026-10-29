@@ -7,7 +7,32 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Ajouté
+
+- **Nouveau modèle : Parakeet v3** (NVIDIA, 669 Mo), à côté de Small, Medium et Large v3.
+  Mesuré le 2026-10-29 sur trois lecteurs LibriVox en français, sur processeur seul : **2 à 3
+  fois plus rapide que Small**, et plus juste sur deux voix sur trois (orthographe, ponctuation).
+  ⚠️ Sur la troisième voix, il a rendu un texte inutilisable, là où Small transcrivait
+  correctement : **c'est pourquoi Small reste le modèle par défaut**, et Parakeet un choix.
+
+  Ses trois limites sont écrites dans sa description, là où se fait le choix :
+
+  - **25 langues européennes seulement**, donc **pas de coréen**. Choisir Parakeet avec le
+    coréen est refusé **avant d'ouvrir le microphone**, avec le remède (« choisissez un modèle
+    Whisper »), au lieu de taper un texte phonétique dans une autre langue.
+  - **Pas de vocabulaire personnalisé** : `parakeet-cli` n'a pas d'option `--prompt`.
+  - **Calcul sur le processeur**, sauf avec le moteur NVIDIA, dont l'archive contient son propre
+    `parakeet-cli`. Notre moteur Vulkan ne le contient pas encore : Parakeet passe alors par le
+    moteur fourni avec Oyant au lieu d'être refusé.
+
+  Le moteur fourni avec Oyant embarque désormais `parakeet-cli.exe` et `parakeet.dll` (moins d'un
+  mégaoctet). Un test vérifie que le catalogue et `scripts/preparer-moteur-embarque.py` restent
+  d'accord.
+
 ### Modifié
+
+- **L'aide de la ligne de commande dérive la liste des modèles du catalogue** au lieu de
+  l'écrire à la main : écrite en dur, elle aurait oublié Parakeet dès son ajout.
 
 - **Adresse de l'association : 34 rue Decomberousse, 69100 Villeurbanne** (le siège quitte le 4 rue Isabelle Sadoyan), dans `LICENSE.md`.
 

@@ -37,6 +37,12 @@ pub struct Moteur {
     pub prefixe: &'static str,
     /// Le binaire a appeler, une fois l'archive deballee.
     pub executable: &'static str,
+    /// Le binaire qui lit les modeles Parakeet, vide si cette archive n'en contient pas.
+    ///
+    /// ⚠️ Releve dans chaque archive le 2026-10-29 et pas suppose : les archives amont (processeur,
+    /// CUDA, Linux) le portent toutes, notre artefact Vulkan non, parce qu'il ne construit que la
+    /// cible `whisper-cli`. Vide veut dire « Parakeet indisponible avec ce choix », et c'est dit.
+    pub executable_parakeet: &'static str,
     /// Livre PAR L'INSTALLATEUR, donc rien a telecharger ni a verifier a l'execution.
     ///
     /// ⛔ C'est le plancher du produit : Oyant doit savoir dicter des la fin de l'installation,
@@ -86,6 +92,9 @@ pub const MOTEURS: &[Moteur] = &[
         empreinte: "",
         prefixe: "Release/",
         executable: "whisper-cli.exe",
+        // ⚠️ Present seulement si `scripts/preparer-moteur-embarque.py` le garde dans son jeu
+        // minimal : l'archive amont le contient, le moteur embarque n'en prend qu'une partie.
+        executable_parakeet: "parakeet-cli.exe",
         disponible: true,
         indisponible_parce_que: "",
         // Le processeur est toujours la : c'est le plancher du produit.
@@ -110,6 +119,7 @@ pub const MOTEURS: &[Moteur] = &[
         empreinte: "af520ddd034d985b55dfeea3e465ed93653ba2aee1a55e865033edc548c272a7",
         prefixe: "Release/",
         executable: "whisper-cli.exe",
+        executable_parakeet: "parakeet-cli.exe",
         disponible: true,
         indisponible_parce_que: "",
         // Posee dans System32 par le pilote NVIDIA. Sans elle, ce choix ferait telecharger
@@ -136,6 +146,9 @@ pub const MOTEURS: &[Moteur] = &[
         // A plat, contrairement aux archives amont qui rangent tout sous `Release/`.
         prefixe: "",
         executable: "whisper-cli.exe",
+        // ⚠️ Vide tant que notre artefact ne construit que la cible `whisper-cli`. L'y ajouter
+        // demande une NOUVELLE URL, l'objet distant actuel ne devant jamais etre ecrase.
+        executable_parakeet: "",
         disponible: true,
         indisponible_parce_que: "",
         // ⚠️ Volontairement vide, alors que `vulkan-1.dll` conditionne bel et bien ce moteur.
@@ -189,6 +202,7 @@ pub const MOTEURS: &[Moteur] = &[Moteur {
 
     // Pas de `.exe`, et le nom differe de la version Windows.
     executable: "whisper-cli",
+    executable_parakeet: "parakeet-cli",
     disponible: true,
     indisponible_parce_que: "",
     bibliotheque_requise: "",
@@ -267,6 +281,29 @@ fn dossier(moteur: &Moteur) -> Result<PathBuf, String> {
 /// par les deux.
 pub fn executable(moteur: &Moteur) -> Result<PathBuf, String> {
     Ok(dossier(moteur)?.join(moteur.executable))
+}
+
+/// Le binaire qui sait lire un modele de cette famille, dans ce moteur.
+///
+/// ⛔ **Une archive sans Parakeet rend une ERREUR, pas le binaire de Whisper.** Donner un modele
+/// Parakeet a `whisper-cli` echouerait sur un message de format de fichier, qui enverrait chercher
+/// un telechargement corrompu au lieu d'un moteur qui ne sait pas le lire.
+pub fn executable_pour(
+    moteur: &Moteur,
+    famille: crate::modeles::Famille,
+) -> Result<PathBuf, String> {
+    match famille {
+        crate::modeles::Famille::Whisper => executable(moteur),
+        crate::modeles::Famille::Parakeet => {
+            if moteur.executable_parakeet.is_empty() {
+                return Err(format!(
+                    "« {} » ne sait pas encore faire tourner Parakeet.",
+                    moteur.nom
+                ));
+            }
+            Ok(dossier(moteur)?.join(moteur.executable_parakeet))
+        }
+    }
 }
 
 /// Marque portant l'empreinte de l'ARCHIVE qui a produit cette installation.
@@ -897,8 +934,11 @@ pub async fn prechauffer(identifiant: String) -> Result<bool, String> {
 
     // Le plus petit modele present suffit : on exerce les noyaux, on ne transcrit rien d'utile.
     let dossier_modeles = crate::chemins::modeles()?;
+    // ⚠️ Whisper seulement : `whisper-cli` ne sait pas lire un modele Parakeet, et un echec ici
+    // serait silencieux, puisque le resultat du prechauffage est jete.
     let Some(modele) = crate::modeles::CATALOGUE
         .iter()
+        .filter(|m| m.famille == crate::modeles::Famille::Whisper)
         .map(|m| dossier_modeles.join(m.fichier))
         .find(|chemin| chemin.is_file())
     else {
@@ -937,57 +977,94 @@ pub struct Transcription {
 /// ⚠️ **Le texte est lu sur la SORTIE STANDARD, les diagnostics sur la sortie d'erreur.** Le
 /// moteur ecrit `load_backend:` et `read_audio_data:` sur stderr : les melanger collerait ces
 /// lignes dans le texte dicte, qui serait alors tape dans l'application de l'utilisateur.
-pub fn transcrire(
-    executable: &Path,
-    modele: &Path,
-    audio: &Path,
-    langue: &str,
-    fils: u32,
+/// Ce qu'on demande au moteur, independamment du programme qui le fera.
+pub struct Demande<'a> {
+    pub famille: crate::modeles::Famille,
+    pub modele: &'a Path,
+    pub audio: &'a Path,
+    pub langue: &'a str,
+    pub fils: u32,
     // ⚠️ 0 garde le moteur au plus pres de ce qu'il a entendu. Au-dela il s'autorise a deviner
     // quand il hesite, ce qui rend un texte plus fluide et moins fidele.
-    temperature: f32,
+    pub temperature: f32,
     // Vocabulaire de l'utilisateur, deja mis en forme par `prompt_de_vocabulaire`. `None` quand
     // il n'y en a pas : on ne passe alors PAS de `--prompt` du tout, plutot qu'un prompt vide,
     // qui compterait quand meme comme contexte.
-    prompt: Option<&str>,
-) -> Result<Transcription, String> {
+    pub prompt: Option<&'a str>,
+}
+
+/// Les arguments a passer au moteur.
+///
+/// Fonction PURE : elle se teste sans moteur installe, et c'est la que se joue la difference
+/// entre les deux familles.
+pub fn arguments(demande: &Demande) -> Vec<std::ffi::OsString> {
+    let mut arguments: Vec<std::ffi::OsString> = vec![
+        "-m".into(),
+        demande.modele.into(),
+        "-f".into(),
+        demande.audio.into(),
+        "-t".into(),
+        demande.fils.to_string().into(),
+    ];
+
+    match demande.famille {
+        crate::modeles::Famille::Parakeet => {
+            // ⛔ **Ni langue, ni temperature, ni vocabulaire** : `parakeet-cli` n'a aucune de ces
+            // options et refuserait de demarrer. Il detecte seul la langue parmi les siennes,
+            // ce que `Famille::connait` a verifie avant d'arriver ici.
+            arguments.push("--no-prints".into());
+        }
+        crate::modeles::Famille::Whisper => {
+            arguments.extend([
+                "-l".into(),
+                demande.langue.into(),
+                "--temperature".into(),
+                demande.temperature.to_string().into(),
+                // Sans horodatage : on veut du texte a taper, pas un fichier de sous-titres.
+                "--no-timestamps".into(),
+                "--no-prints".into(),
+            ]);
+
+            if let Some(vocabulaire) = demande.prompt {
+                // ⛔ `--carry-initial-prompt` n'est pas optionnel ici. Sans lui, le prompt ne vaut
+                // que pour la PREMIERE fenetre de trente secondes : une dictee plus longue
+                // perdrait le vocabulaire en cours de route, et le defaut se manifesterait
+                // uniquement sur les longues dictees, donc rarement et sans rapport apparent avec
+                // la longueur.
+                arguments.extend([
+                    "--prompt".into(),
+                    vocabulaire.into(),
+                    "--carry-initial-prompt".into(),
+                ]);
+            }
+        }
+    }
+
+    arguments
+}
+
+pub fn transcrire(executable: &Path, demande: &Demande) -> Result<Transcription, String> {
     if !executable.is_file() {
         return Err("The transcription engine is not installed.".to_string());
     }
-    if !modele.is_file() {
+    if !demande.modele.is_file() {
         return Err("The selected model is not downloaded.".to_string());
     }
-    if !audio.is_file() {
-        return Err(format!("File not found: {}", audio.display()));
+    if !demande.audio.is_file() {
+        return Err(format!("File not found: {}", demande.audio.display()));
+    }
+    // Dernier filet : `dictee::resoudre` refuse deja ce cas, avec un message dans la langue de
+    // l'appelant. Celui-ci ne sert que si un futur appelant passait a cote.
+    if !demande.famille.connait(demande.langue) {
+        return Err(format!(
+            "This model cannot transcribe language \"{}\".",
+            demande.langue
+        ));
     }
 
     let debut = std::time::Instant::now();
     let mut commande = commande(executable);
-    commande
-        .arg("-m")
-        .arg(modele)
-        .arg("-f")
-        .arg(audio)
-        .arg("-l")
-        .arg(langue)
-        .arg("-t")
-        .arg(fils.to_string())
-        .arg("--temperature")
-        .arg(temperature.to_string())
-        // Sans horodatage : on veut du texte a taper, pas un fichier de sous-titres.
-        .arg("--no-timestamps")
-        .arg("--no-prints");
-
-    if let Some(vocabulaire) = prompt {
-        // ⛔ `--carry-initial-prompt` n'est pas optionnel ici. Sans lui, le prompt ne vaut que
-        // pour la PREMIERE fenetre de trente secondes : une dictee plus longue perdrait le
-        // vocabulaire en cours de route, et le defaut se manifesterait uniquement sur les longues
-        // dictees, donc rarement et sans rapport apparent avec la longueur.
-        commande
-            .arg("--prompt")
-            .arg(vocabulaire)
-            .arg("--carry-initial-prompt");
-    }
+    commande.args(arguments(demande));
 
     let sortie = commande
         .output()
@@ -1593,5 +1670,100 @@ mod tests {
             prompt_des_reglages(&crate::reglages::Reglages::default()),
             None
         );
+    }
+
+    fn demande_essai<'a>(famille: crate::modeles::Famille, prompt: Option<&'a str>) -> Demande<'a> {
+        Demande {
+            famille,
+            modele: Path::new("modele.bin"),
+            audio: Path::new("audio.wav"),
+            langue: "fr",
+            fils: 4,
+            temperature: 0.0,
+            prompt,
+        }
+    }
+
+    fn en_texte(arguments: Vec<std::ffi::OsString>) -> Vec<String> {
+        arguments
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// ⛔ `parakeet-cli` refuse de demarrer sur une option qu'il ne connait pas : aucune option
+    /// propre a Whisper ne doit lui parvenir, meme quand les reglages en portent.
+    #[test]
+    fn parakeet_ne_recoit_aucune_option_de_whisper() {
+        let arguments = en_texte(arguments(&demande_essai(
+            crate::modeles::Famille::Parakeet,
+            Some("ECG, Kowalski"),
+        )));
+        for interdite in [
+            "-l",
+            "--temperature",
+            "--prompt",
+            "--carry-initial-prompt",
+            "--no-timestamps",
+        ] {
+            assert!(
+                !arguments.iter().any(|a| a == interdite),
+                "{interdite} ne doit pas partir vers Parakeet : {arguments:?}"
+            );
+        }
+        assert!(arguments.contains(&"--no-prints".to_string()));
+    }
+
+    /// La reecriture en `Demande` ne doit rien avoir retire a Whisper.
+    #[test]
+    fn whisper_garde_langue_temperature_et_vocabulaire() {
+        let arguments = en_texte(arguments(&demande_essai(
+            crate::modeles::Famille::Whisper,
+            Some("ECG"),
+        )));
+        let suivant = |option: &str| {
+            let position = arguments.iter().position(|a| a == option)?;
+            arguments.get(position + 1).cloned()
+        };
+        assert_eq!(suivant("-l").as_deref(), Some("fr"));
+        assert_eq!(suivant("--temperature").as_deref(), Some("0"));
+        assert_eq!(suivant("--prompt").as_deref(), Some("ECG"));
+        assert!(arguments.contains(&"--carry-initial-prompt".to_string()));
+        assert!(arguments.contains(&"--no-timestamps".to_string()));
+    }
+
+    /// ⛔ **Le moteur embarque n'a Parakeet que si le script qui le prepare le garde.** Les deux
+    /// vivent dans des fichiers differents : sans ce test, retirer `parakeet-cli.exe` du jeu
+    /// minimal laisserait le catalogue promettre un programme absent de l'installateur, et le
+    /// defaut ne se verrait qu'a la premiere dictee d'un utilisateur.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn le_script_du_moteur_embarque_garde_parakeet() {
+        let embarque = MOTEURS
+            .iter()
+            .find(|m| m.embarque)
+            .expect("un moteur embarque");
+        let script = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("scripts")
+                .join("preparer-moteur-embarque.py"),
+        )
+        .expect("script lisible");
+        let bibliotheque = embarque.executable_parakeet.replace("-cli.exe", ".dll");
+        for fichier in [embarque.executable_parakeet, bibliotheque.as_str()] {
+            assert!(
+                script.contains(&format!("\"{fichier}\"")),
+                "{fichier} manque au jeu minimal de preparer-moteur-embarque.py"
+            );
+        }
+    }
+
+    /// Un moteur sans Parakeet le dit, au lieu de rendre le binaire de Whisper.
+    #[test]
+    fn un_moteur_sans_parakeet_rend_une_erreur() {
+        for moteur in MOTEURS.iter().filter(|m| m.executable_parakeet.is_empty()) {
+            assert!(executable_pour(moteur, crate::modeles::Famille::Parakeet).is_err());
+        }
     }
 }

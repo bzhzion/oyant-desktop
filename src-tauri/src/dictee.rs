@@ -30,12 +30,23 @@ pub enum Manque {
     ModeleAbsent(String),
     AucunMoteur,
     MoteurAbsent,
+    /// Le modele choisi ne sait pas transcrire la langue choisie (Parakeet et le coreen).
+    LangueRefusee {
+        modele: String,
+        langue: String,
+    },
+    /// Le moteur choisi ne contient pas le programme qui lit ce modele.
+    FamilleIndisponible {
+        modele: String,
+        moteur: String,
+    },
 }
 
 /// De quoi lancer une transcription.
 pub struct Outils {
     pub executable: PathBuf,
     pub modele: PathBuf,
+    pub famille: modeles::Famille,
 }
 
 /// Trouve le moteur et le modele, ou dit precisement lequel manque.
@@ -44,9 +55,20 @@ pub struct Outils {
 /// et la copie de la ligne de commande ignorait la branche « moteur embarque » : elle annoncait
 /// « le moteur n'est pas installe » sur un moteur livre avec le produit. Deux copies d'une regle
 /// finissent toujours par diverger, et celle qu'on ne regarde pas est celle qui ment.
-pub fn resoudre(modele_id: &str) -> Result<Outils, Manque> {
+///
+/// ⚠️ **La langue est verifiee AVANT tout le reste**, avant meme de savoir si le modele est
+/// telecharge : sinon quelqu'un qui dicte en coreen avec Parakeet se ferait d'abord dire de
+/// telecharger 669 Mo, pour apprendre ensuite que ca ne servirait a rien.
+pub fn resoudre(modele_id: &str, langue: &str) -> Result<Outils, Manque> {
     let modele = modeles::par_identifiant(modele_id)
         .ok_or_else(|| Manque::ModeleInconnu(modele_id.to_string()))?;
+
+    if !modele.famille.connait(langue) {
+        return Err(Manque::LangueRefusee {
+            modele: modele.nom.to_string(),
+            langue: langue.to_string(),
+        });
+    }
 
     let chemin_modele = chemins::modeles()
         .map_err(|_| Manque::ModeleAbsent(modele_id.to_string()))?
@@ -56,7 +78,26 @@ pub fn resoudre(modele_id: &str) -> Result<Outils, Manque> {
     }
 
     let moteur = moteur::actif().ok_or(Manque::AucunMoteur)?;
-    let executable = moteur::executable(moteur).map_err(|_| Manque::MoteurAbsent)?;
+    // ⚠️ **Parakeet passe par le moteur EMBARQUE quand le moteur choisi ne le contient pas**
+    // (aujourd'hui, notre artefact Vulkan). Refuser aurait bloque precisement ceux qui ont choisi
+    // une carte graphique, alors que Parakeet est concu pour le processeur. Mesure du 2026-10-29 :
+    // il y reste un peu plus lent que Whisper Small sur carte Vulkan (3,5 a 4,9 s contre 2,6 s
+    // pour 20 s d'audio), mais nettement plus juste. Ce n'est pas un repli cache : la description
+    // du modele dit qu'il calcule sur le processeur.
+    let moteur =
+        if modele.famille == modeles::Famille::Parakeet && moteur.executable_parakeet.is_empty() {
+            moteur::MOTEURS
+                .iter()
+                .find(|m| m.embarque && !m.executable_parakeet.is_empty())
+                .ok_or_else(|| Manque::FamilleIndisponible {
+                    modele: modele.nom.to_string(),
+                    moteur: moteur.nom.to_string(),
+                })?
+        } else {
+            moteur
+        };
+    let executable =
+        moteur::executable_pour(moteur, modele.famille).map_err(|_| Manque::MoteurAbsent)?;
     if !executable.is_file() {
         return Err(Manque::MoteurAbsent);
     }
@@ -64,6 +105,7 @@ pub fn resoudre(modele_id: &str) -> Result<Outils, Manque> {
     Ok(Outils {
         executable,
         modele: chemin_modele,
+        famille: modele.famille,
     })
 }
 
@@ -85,6 +127,16 @@ impl Manque {
                  l'installer."
                     .to_string()
             }
+            // ⚠️ Nomme le remede, qui est de changer de MODELE : « langue non prise en charge »
+            // seul ferait chercher dans le reglage de langue.
+            Manque::LangueRefusee { modele, langue } => format!(
+                "{modele} ne transcrit pas cette langue ({langue}). Choisissez un modèle Whisper, \
+                 ou la détection automatique."
+            ),
+            Manque::FamilleIndisponible { modele, moteur } => format!(
+                "{modele} ne fonctionne pas encore avec « {moteur} ». Choisissez « Le processeur » \
+                 dans les réglages, ou un modèle Whisper."
+            ),
         }
     }
 
@@ -103,6 +155,13 @@ impl Manque {
                  Models section."
                     .to_string()
             }
+            Manque::LangueRefusee { modele, langue } => format!(
+                "{modele} cannot transcribe language `{langue}`.\nUse a Whisper model, or `-l auto`."
+            ),
+            Manque::FamilleIndisponible { modele, moteur } => format!(
+                "{modele} does not run on the engine \"{moteur}\" yet.\nSelect the CPU engine in \
+                 Oyant, or a Whisper model."
+            ),
         }
     }
 }
@@ -162,7 +221,7 @@ fn commencer_avec(app: &AppHandle, cible: Option<isize>) {
 
     // ⚠️ On verifie le moteur et le modele AVANT d'ouvrir le microphone. Enregistrer d'abord
     // ferait parler quelqu'un dans le vide pour lui annoncer ensuite qu'il manquait un fichier.
-    if let Err(manque) = resoudre(&reglages.modele) {
+    if let Err(manque) = resoudre(&reglages.modele, &reglages.langue) {
         signaler(app, &manque.en_francais());
         return;
     }
@@ -299,21 +358,26 @@ fn transcrire_et_ecrire(
     reglages: &reglages::Reglages,
     cible: Option<isize>,
 ) -> Result<(), String> {
-    let outils = resoudre(&reglages.modele).map_err(|manque| manque.en_francais())?;
+    let outils =
+        resoudre(&reglages.modele, &reglages.langue).map_err(|manque| manque.en_francais())?;
 
     // ⚠️ Le fichier vit dans le repertoire temporaire et disparait ensuite : un enregistrement
     // de voix qui traine est une donnee personnelle qu'on n'a pas demande a conserver.
     let audio_fichier = std::env::temp_dir().join(format!("oyant-{}.wav", std::process::id()));
     audio::ecrire_wav(&audio_fichier, echantillons, audio::TAUX_MOTEUR)?;
 
+    let prompt = moteur::prompt_des_reglages(reglages);
     let transcription = moteur::transcrire(
         &outils.executable,
-        &outils.modele,
-        &audio_fichier,
-        &reglages.langue,
-        reglages.fils,
-        reglages.temperature,
-        moteur::prompt_des_reglages(reglages).as_deref(),
+        &moteur::Demande {
+            famille: outils.famille,
+            modele: &outils.modele,
+            audio: &audio_fichier,
+            langue: &reglages.langue,
+            fils: reglages.fils,
+            temperature: reglages.temperature,
+            prompt: prompt.as_deref(),
+        },
     );
     let _ = std::fs::remove_file(&audio_fichier);
     let transcription = transcription?;
