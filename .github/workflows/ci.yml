@@ -7,6 +7,7 @@
 # ⚠️ Runners GitHub : ce depot est PUBLIC depuis le 2026-09-21, donc ils y sont gratuits. Ce
 # fichier a longtemps choisi des machines auto-hebergees, pour la seule raison qu'un depot prive
 # fait facturer chaque minute, macOS au decuple. La raison a disparu avec la visibilite.
+# Exception depuis le 2026-10-29 : macOS passe par `rigel` hors pull request, voir `runs-on`.
 #
 # ⚠️ Comme dans release.yml, les commentaires qui nomment des machines maison decrivent une regle
 # toujours valable ailleurs, mais sans objet ici : un runner GitHub est jetable.
@@ -29,7 +30,19 @@ env:
 jobs:
   verifier:
     name: ${{ matrix.nom }}
-    runs-on: ${{ matrix.runner }}
+    # ⚠️ **macOS passe par `rigel`, le Mac dedie du parc, sauf pour une pull request.**
+    # Le 2026-10-29, le job `macos-latest` a attendu quinze minutes sans qu'aucun Mac de GitHub
+    # ne le prenne, puis a ete annule sans avoir execute une ligne : la CI etait rouge pour une
+    # raison qui n'avait rien a voir avec le code.
+    #
+    # ⛔ **Jamais `rigel` pour une pull request** : ce depot est PUBLIC, et GitHub n'exige
+    # l'approbation d'un mainteneur que pour un PREMIER contributeur (`first_time_contributors`).
+    # Des sa deuxieme PR, un inconnu ferait executer son code sur une machine du parc, avec
+    # acces au reseau du bureau. Les PR gardent donc le Mac jetable de GitHub.
+    #
+    # ⚠️ Le label `rigel` est obligatoire : sans lui, `[self-hosted, macOS, ARM64]` peut tomber
+    # sur `macbook-arm64`, le Mac d'un collegue.
+    runs-on: ${{ (matrix.nom == 'macos' && github.event_name != 'pull_request') && fromJSON('["self-hosted", "macOS", "ARM64", "rigel"]') || matrix.runner }}
     strategy:
       # Jamais d'arret au premier echec : on veut savoir si un defaut touche une seule
       # plateforme ou les trois, l'information est differente.
@@ -41,6 +54,7 @@ jobs:
         include:
           - { nom: linux, runner: ubuntu-latest }
           - { nom: windows, runner: windows-latest }
+          # `macos-latest` ne sert plus qu'aux pull requests, voir `runs-on` plus haut.
           - { nom: macos, runner: macos-latest }
 
     steps:

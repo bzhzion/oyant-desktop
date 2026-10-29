@@ -31,6 +31,10 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Modifié
 
+- **La vérification macOS passe par `rigel`, le Mac dédié du parc**, après qu'un job sur Mac de
+  GitHub a attendu quinze minutes sans machine puis a été annulé sans rien exécuter. ⛔ **Sauf
+  pour une pull request**, qui garde le Mac jetable de GitHub : le dépôt est public, et GitHub ne
+  fait approuver que la première PR d'un contributeur.
 - **L'aide de la ligne de commande dérive la liste des modèles du catalogue** au lieu de
   l'écrire à la main : écrite en dur, elle aurait oublié Parakeet dès son ajout.
 
