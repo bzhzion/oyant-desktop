@@ -9,6 +9,20 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Détection de parole (Silero VAD) avant Whisper, activée par défaut.** Le moteur ne reçoit
+  plus que les moments où quelqu'un parle. Mesuré le 2026-10-29, elle corrige deux défauts :
+  - **Whisper inventait des phrases sur du bruit.** Six secondes de souffle de ventilation, assez
+    fortes pour passer le seuil de silence, devenaient « (Sous-titres réalisés par la communauté
+    d'Amara.org) », tapé dans l'application de l'utilisateur. Désormais rien n'est tapé, et la
+    réponse arrive en 0,7 s au lieu de 4.
+  - **Medium perdait le texte après une pause** : sur trente secondes commençant par un titre
+    suivi d'un silence, il ne rendait que la première phrase (29 caractères sur 373). Le texte
+    revient en entier.
+
+  Une parole faible ou couverte par un bruit de fond reste transcrite. Le modèle (885 Ko) est
+  **intégré à l'exécutable** : ni téléchargement, ni réseau, et le même comportement sous Windows
+  et Linux. Réglage avancé « Ignorer les bruits sans parole », à couper seulement si l'on
+  chuchote. Sans effet avec Parakeet, qui n'a pas cette option.
 - **Nouveau modèle : Parakeet v3** (NVIDIA, 669 Mo), à côté de Small, Medium et Large v3.
   Mesuré le 2026-10-29 sur trois lecteurs LibriVox en français, sur processeur seul : **2 à 3
   fois plus rapide que Small**, et plus juste sur deux voix sur trois (orthographe, ponctuation).
@@ -27,7 +41,8 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
   Le moteur fourni avec Oyant embarque désormais `parakeet-cli.exe` et `parakeet.dll` (moins d'un
   mégaoctet). Un test vérifie que le catalogue et `scripts/preparer-moteur-embarque.py` restent
-  d'accord.
+  d'accord. Son attribution CC BY 4.0 (NVIDIA, conversion ggml-org) est dans `NOTICE.md`, avec la
+  licence MIT du modèle de détection de parole.
 
 ### Modifié
 

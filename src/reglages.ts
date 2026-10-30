@@ -38,6 +38,7 @@ export type Reglages = {
   threads: number;
   temperature: number;
   live_transcription: boolean;
+  voice_detection: boolean;
 
   injection_delay_ms: number;
   auto_enter: boolean;
@@ -209,6 +210,13 @@ const GROUPES: Groupe[] = [
         max: 1,
         pas: 0.05,
         aide: 'À 0, Oyant reste au plus près de ce qu’il a entendu. Plus haut, il s’autorise à deviner quand il hésite.',
+      },
+      {
+        cle: 'voice_detection',
+        avance: true,
+        type: 'bool',
+        titre: 'Ignorer les bruits sans parole',
+        aide: 'Oyant ne transcrit que les moments où quelqu’un parle. Sans cela, un bruit de fond peut devenir une phrase inventée. À couper seulement si vous chuchotez et que des mots disparaissent. Sans effet avec Parakeet.',
       },
     ],
   },

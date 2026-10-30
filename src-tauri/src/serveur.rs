@@ -384,18 +384,21 @@ where
     }
 
     let prompt = crate::moteur::prompt_des_reglages(&reglages);
-    let resultat = crate::moteur::transcrire(
-        &outils.executable,
-        &crate::moteur::Demande {
-            famille: outils.famille,
-            modele: &outils.modele,
-            audio: &chemin,
-            langue: &reglages.langue,
-            fils: reglages.fils,
-            temperature: reglages.temperature,
-            prompt: prompt.as_deref(),
-        },
-    );
+    let resultat = crate::vad::selon(&reglages).and_then(|vad| {
+        crate::moteur::transcrire(
+            &outils.executable,
+            &crate::moteur::Demande {
+                famille: outils.famille,
+                modele: &outils.modele,
+                audio: &chemin,
+                langue: &reglages.langue,
+                fils: reglages.fils,
+                temperature: reglages.temperature,
+                prompt: prompt.as_deref(),
+                vad: vad.as_deref(),
+            },
+        )
+    });
     let _ = std::fs::remove_file(&chemin);
 
     match resultat {

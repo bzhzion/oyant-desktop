@@ -367,18 +367,22 @@ fn transcrire_et_ecrire(
     audio::ecrire_wav(&audio_fichier, echantillons, audio::TAUX_MOTEUR)?;
 
     let prompt = moteur::prompt_des_reglages(reglages);
-    let transcription = moteur::transcrire(
-        &outils.executable,
-        &moteur::Demande {
-            famille: outils.famille,
-            modele: &outils.modele,
-            audio: &audio_fichier,
-            langue: &reglages.langue,
-            fils: reglages.fils,
-            temperature: reglages.temperature,
-            prompt: prompt.as_deref(),
-        },
-    );
+    let vad = crate::vad::selon(reglages);
+    let transcription = vad.and_then(|vad| {
+        moteur::transcrire(
+            &outils.executable,
+            &moteur::Demande {
+                famille: outils.famille,
+                modele: &outils.modele,
+                audio: &audio_fichier,
+                langue: &reglages.langue,
+                fils: reglages.fils,
+                temperature: reglages.temperature,
+                prompt: prompt.as_deref(),
+                vad: vad.as_deref(),
+            },
+        )
+    });
     let _ = std::fs::remove_file(&audio_fichier);
     let transcription = transcription?;
 

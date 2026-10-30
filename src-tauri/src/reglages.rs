@@ -109,6 +109,9 @@ pub struct Reglages {
     pub temperature: f32,
     #[serde(rename = "live_transcription")]
     pub transcription_directe: bool,
+    /// Ne donner au moteur que les passages ou quelqu'un parle (Silero VAD). Voir `vad.rs`.
+    #[serde(rename = "voice_detection")]
+    pub detection_parole: bool,
     /// Sur quoi l'ordinateur fait le calcul : processeur, carte graphique.
     ///
     /// ⚠️ Ce n'est PAS un reglage comme les autres : il designe un programme qu'il faut avoir
@@ -215,6 +218,10 @@ impl Default for Reglages {
             fils: 4,
             temperature: 0.0,
             transcription_directe: false,
+            // ⛔ Active par defaut, y compris pour une configuration existante (`serde(default)`) :
+            // sans lui, un souffle de ventilation devient une phrase tapee dans l'application de
+            // l'utilisateur. Le couper ne sert qu'a quelqu'un qui chuchote.
+            detection_parole: true,
             calcul: "windows-x64-cpu".to_string(),
 
             // ⛔ ZERO. Il valait 50 ms, soit une pause APRES CHAQUE CARACTERE : une phrase de

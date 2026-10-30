@@ -991,6 +991,8 @@ pub struct Demande<'a> {
     // il n'y en a pas : on ne passe alors PAS de `--prompt` du tout, plutot qu'un prompt vide,
     // qui compterait quand meme comme contexte.
     pub prompt: Option<&'a str>,
+    /// Le modele de detection de parole, `None` si le reglage est coupe. Voir `vad.rs`.
+    pub vad: Option<&'a Path>,
 }
 
 /// Les arguments a passer au moteur.
@@ -1009,8 +1011,8 @@ pub fn arguments(demande: &Demande) -> Vec<std::ffi::OsString> {
 
     match demande.famille {
         crate::modeles::Famille::Parakeet => {
-            // ⛔ **Ni langue, ni temperature, ni vocabulaire** : `parakeet-cli` n'a aucune de ces
-            // options et refuserait de demarrer. Il detecte seul la langue parmi les siennes,
+            // ⛔ **Ni langue, ni temperature, ni vocabulaire, ni detection de parole** :
+            // `parakeet-cli` n'a aucune de ces options et refuserait de demarrer. Il detecte seul la langue parmi les siennes,
             // ce que `Famille::connait` a verifie avant d'arriver ici.
             arguments.push("--no-prints".into());
         }
@@ -1036,6 +1038,13 @@ pub fn arguments(demande: &Demande) -> Vec<std::ffi::OsString> {
                     vocabulaire.into(),
                     "--carry-initial-prompt".into(),
                 ]);
+            }
+
+            if let Some(modele_vad) = demande.vad {
+                // ⚠️ **Les seuils par defaut, et c'est mesure.** Porter le silence minimal a
+                // 500 ms (`-vsd`) a refait perdre sa premiere phrase a Medium, sans rien gagner en
+                // vitesse : la valeur amont (100 ms) est la bonne pour de la dictee.
+                arguments.extend(["--vad".into(), "-vm".into(), modele_vad.into()]);
             }
         }
     }
@@ -1681,6 +1690,7 @@ mod tests {
             fils: 4,
             temperature: 0.0,
             prompt,
+            vad: Some(Path::new("vad.bin")),
         }
     }
 
@@ -1705,6 +1715,8 @@ mod tests {
             "--prompt",
             "--carry-initial-prompt",
             "--no-timestamps",
+            "--vad",
+            "-vm",
         ] {
             assert!(
                 !arguments.iter().any(|a| a == interdite),
@@ -1728,8 +1740,20 @@ mod tests {
         assert_eq!(suivant("-l").as_deref(), Some("fr"));
         assert_eq!(suivant("--temperature").as_deref(), Some("0"));
         assert_eq!(suivant("--prompt").as_deref(), Some("ECG"));
+        assert!(arguments.contains(&"--vad".to_string()));
+        assert_eq!(suivant("-vm").as_deref(), Some("vad.bin"));
         assert!(arguments.contains(&"--carry-initial-prompt".to_string()));
         assert!(arguments.contains(&"--no-timestamps".to_string()));
+    }
+
+    /// Reglage coupe : le moteur ne doit recevoir aucune option de detection, sans quoi le
+    /// reglage serait affiche sans rien piloter.
+    #[test]
+    fn sans_detection_de_parole_aucune_option_vad() {
+        let mut demande = demande_essai(crate::modeles::Famille::Whisper, None);
+        demande.vad = None;
+        let arguments = en_texte(arguments(&demande));
+        assert!(!arguments.iter().any(|a| a == "--vad" || a == "-vm"));
     }
 
     /// ⛔ **Le moteur embarque n'a Parakeet que si le script qui le prepare le garde.** Les deux

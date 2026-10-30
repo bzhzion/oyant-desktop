@@ -13,6 +13,10 @@
 # Configuration et modeles locaux, jamais versionnes
 /.oyant-local/
 *.bin
+# Seule exception : le modele de detection de parole (885 Ko), integre a l'executable par
+# `include_bytes!` et verifie par son empreinte dans `vad.rs`. Nomme exactement, pour qu'aucun
+# autre `.bin` ne passe par cette porte.
+!/src-tauri/vad/ggml-silero-v6.2.0.bin
 
 # Secrets
 .env

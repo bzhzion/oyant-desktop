@@ -73,6 +73,50 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Parakeet model
+
+The `ggml-parakeet-tdt-0.6b-v3-q8_0.bin` file the application downloads at the user's request
+is a conversion of NVIDIA's Parakeet TDT 0.6B v3 model, **converted to the ggml format and
+quantized to 8 bits** by the ggml authors (`ggml-org/parakeet-GGUF`). The original weights are
+released by NVIDIA under the Creative Commons Attribution 4.0 International licence
+(CC BY 4.0), which requires this attribution and the indication of those changes.
+
+- Original model: <https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3>, © NVIDIA Corporation
+- Conversion: <https://huggingface.co/ggml-org/parakeet-GGUF>
+- Licence: <https://creativecommons.org/licenses/by/4.0/>
+
+## Silero VAD model
+
+The application **embeds** `ggml-silero-v6.2.0.bin`, the Silero voice activity detection model
+converted to the ggml format for whisper.cpp (`ggml-org/whisper-vad`). It lets the engine
+transcribe only the moments where someone speaks.
+
+Source: <https://github.com/snakers4/silero-vad>
+
+```
+MIT License
+
+Copyright (c) 2020-present Silero Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Microsoft Visual C++ runtime
 
 The Windows installer places four Visual C++ runtime libraries (`vcruntime140.dll`,

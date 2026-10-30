@@ -25,6 +25,7 @@ mod reglages;
 mod reseau;
 mod serveur;
 mod texte;
+mod vad;
 
 use tauri::Manager;
 
@@ -255,6 +256,9 @@ fn transcrire(demande: &Demandetranscription) -> Result<(), String> {
     let audio = std::path::PathBuf::from(&demande.fichier);
 
     let prompt = moteur::prompt_des_reglages(&reglages);
+    // La ligne de commande parle anglais : le message d'origine, en francais, est mis en annexe.
+    let vad = vad::selon(&reglages)
+        .map_err(|erreur| format!("Voice detection model could not be written ({erreur})."))?;
     let resultat = moteur::transcrire(
         &outils.executable,
         &moteur::Demande {
@@ -265,6 +269,7 @@ fn transcrire(demande: &Demandetranscription) -> Result<(), String> {
             fils: reglages.fils,
             temperature: reglages.temperature,
             prompt: prompt.as_deref(),
+            vad: vad.as_deref(),
         },
     )?;
 
