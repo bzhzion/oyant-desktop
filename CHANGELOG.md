@@ -160,6 +160,11 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **La fenêtre ne déborde plus de l'écran aux échelles élevées** : à 175 % sur un écran 1080p,
+  ses 640 px logiques dépassaient la zone utile, et comme elle n'a pas de barre de titre Windows,
+  sa poignée et sa croix sortaient par le haut. Au démarrage, elle est désormais réduite et
+  recentrée dans la zone utile de son écran, sans passer sous sa taille minimale, et son haut ne
+  remonte jamais au-dessus de l'écran.
 - **Réglages plus lisibles** : un filet discret sépare chaque réglage, et les listes déroulantes
   (langue, façon de dicter, microphone) passent sous leur texte sur toute la largeur au lieu de
   se serrer à côté. Les blocs Vocabulaire, Substitutions et Dictées récentes reçoivent le même

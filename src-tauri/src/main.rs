@@ -16,6 +16,7 @@ mod barre;
 mod bulle;
 mod chemins;
 mod dictee;
+mod ecran;
 mod historique;
 mod injection;
 mod medias;
@@ -380,6 +381,19 @@ fn interface(fenetre_visible: bool) {
             // `demarrer_si_demande`, au démarrage, et pas plus loin. Un serveur qu'on ouvre puis
             // qu'on « protège » ensuite est un serveur ouvert.
             serveur::demarrer_si_demande(app.handle());
+
+            // Le minimum se lit dans tauri.conf.json, qui fait autorite, plutot que d'etre recopie
+            // ici ou il finirait par mentir.
+            if let Some(fenetre) = app.get_webview_window("main") {
+                let minimum = app
+                    .config()
+                    .app
+                    .windows
+                    .first()
+                    .map(|f| (f.min_width.unwrap_or(0.0), f.min_height.unwrap_or(0.0)))
+                    .unwrap_or((0.0, 0.0));
+                ecran::ramener(&fenetre, minimum);
+            }
 
             if !fenetre_visible && let Some(fenetre) = app.get_webview_window("main") {
                 let _ = fenetre.hide();
