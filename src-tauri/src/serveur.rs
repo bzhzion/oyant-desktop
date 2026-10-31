@@ -795,7 +795,9 @@ pub fn reseau_qr() -> Result<(EtatEcoute, Option<QrAppairage>), String> {
         .collect();
     let hotes = adresses_pour_qr(&adresses);
     if hotes.is_empty() {
-        return Err("Aucune carte réseau n’a d’adresse : l’ordinateur n’est sur aucun réseau.".into());
+        return Err(
+            "Aucune carte réseau n’a d’adresse : l’ordinateur n’est sur aucun réseau.".into(),
+        );
     }
     let empreinte = reseau_empreinte()?;
     let texte = charge_qr(&hotes, crate::reseau::PORT, &empreinte, &hostname_court());
@@ -1451,7 +1453,9 @@ mod tests {
         );
         assert_eq!(
             texte,
-            format!("oyant://appairer?v={VERSION_PROTOCOLE}&h=192.168.1.20,10.0.0.5&p=44881&e=abc123&n=PC%20de%20Thierry")
+            format!(
+                "oyant://appairer?v={VERSION_PROTOCOLE}&h=192.168.1.20,10.0.0.5&p=44881&e=abc123&n=PC%20de%20Thierry"
+            )
         );
     }
 
@@ -1460,6 +1464,9 @@ mod tests {
         // Lu tel quel par l'ecran : un serveur jamais demarre ne doit pas proposer de QR.
         let (etat, qr) = reseau_qr().expect("l'etat se lit toujours");
         assert_eq!(etat, EtatEcoute::Eteint);
-        assert!(qr.is_none(), "un QR propose sans ecoute menerait a une adresse morte");
+        assert!(
+            qr.is_none(),
+            "un QR propose sans ecoute menerait a une adresse morte"
+        );
     }
 }

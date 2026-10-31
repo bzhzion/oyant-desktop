@@ -37,7 +37,12 @@ pub fn ajuster(fenetre: Rect, zone: Rect, minimum: (u32, u32)) -> Option<Rect> {
     // haute qu'elle : `saturating_sub` arrête l'écart à zéro, donc la poignée reste visible.
     let x = zone.x + (zone.largeur.saturating_sub(largeur) / 2) as i32;
     let y = zone.y + (zone.hauteur.saturating_sub(hauteur) / 2) as i32;
-    Some(Rect { x, y, largeur, hauteur })
+    Some(Rect {
+        x,
+        y,
+        largeur,
+        hauteur,
+    })
 }
 
 /// Applique `ajuster` à la fenêtre, sur l'écran où elle s'ouvre.
@@ -77,19 +82,34 @@ mod tests {
     use super::*;
 
     // Écran 1920 x 1080 à 175 %, barre des tâches de 48 px logiques (84 physiques).
-    const ZONE_175: Rect = Rect { x: 0, y: 0, largeur: 1920, hauteur: 996 };
+    const ZONE_175: Rect = Rect {
+        x: 0,
+        y: 0,
+        largeur: 1920,
+        hauteur: 996,
+    };
     const MINIMUM_175: (u32, u32) = (805, 735);
 
     #[test]
     fn une_fenetre_qui_tient_ne_bouge_pas() {
-        let fenetre = Rect { x: 100, y: 100, largeur: 980, hauteur: 800 };
+        let fenetre = Rect {
+            x: 100,
+            y: 100,
+            largeur: 980,
+            hauteur: 800,
+        };
         assert_eq!(ajuster(fenetre, ZONE_175, MINIMUM_175), None);
     }
 
     #[test]
     fn a_175_pour_cent_la_fenetre_est_reduite_et_son_haut_reste_visible() {
         // 560 x 640 logiques à 175 % = 980 x 1120, centrée par le système : haut à -62.
-        let fenetre = Rect { x: 470, y: -62, largeur: 980, hauteur: 1120 };
+        let fenetre = Rect {
+            x: 470,
+            y: -62,
+            largeur: 980,
+            hauteur: 1120,
+        };
         let cible = ajuster(fenetre, ZONE_175, MINIMUM_175).expect("doit être ramenée");
         assert_eq!(cible.hauteur, 996);
         assert_eq!(cible.y, 0);
@@ -98,18 +118,41 @@ mod tests {
 
     #[test]
     fn le_haut_ne_sort_jamais_meme_si_le_minimum_depasse_la_zone() {
-        let zone = Rect { x: 0, y: 0, largeur: 900, hauteur: 600 };
-        let fenetre = Rect { x: 0, y: -100, largeur: 900, hauteur: 900 };
+        let zone = Rect {
+            x: 0,
+            y: 0,
+            largeur: 900,
+            hauteur: 600,
+        };
+        let fenetre = Rect {
+            x: 0,
+            y: -100,
+            largeur: 900,
+            hauteur: 900,
+        };
         let cible = ajuster(fenetre, zone, (800, 700)).expect("doit être ramenée");
         assert_eq!(cible.hauteur, 700);
-        assert!(cible.y >= zone.y, "le haut de la fenêtre est sorti de l'écran");
+        assert!(
+            cible.y >= zone.y,
+            "le haut de la fenêtre est sorti de l'écran"
+        );
     }
 
     #[test]
     fn un_second_ecran_garde_son_origine() {
         // Écran secondaire à gauche du principal, origine négative.
-        let zone = Rect { x: -1920, y: 0, largeur: 1920, hauteur: 996 };
-        let fenetre = Rect { x: -1450, y: -62, largeur: 980, hauteur: 1120 };
+        let zone = Rect {
+            x: -1920,
+            y: 0,
+            largeur: 1920,
+            hauteur: 996,
+        };
+        let fenetre = Rect {
+            x: -1450,
+            y: -62,
+            largeur: 980,
+            hauteur: 1120,
+        };
         let cible = ajuster(fenetre, zone, MINIMUM_175).expect("doit être ramenée");
         assert_eq!(cible.x, -1920 + 470);
         assert_eq!(cible.y, 0);

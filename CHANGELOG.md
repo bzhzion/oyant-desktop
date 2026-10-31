@@ -170,6 +170,8 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **CI Linux rouge sur le formatage** depuis l'ajout de `ecran.rs` : `cargo fmt` n'avait pas été
+  passé, seuls clippy et les tests l'avaient été. Formaté.
 - **La fenêtre ne déborde plus de l'écran aux échelles élevées** : à 175 % sur un écran 1080p,
   ses 640 px logiques dépassaient la zone utile, et comme elle n'a pas de barre de titre Windows,
   sa poignée et sa croix sortaient par le haut. Au démarrage, elle est désormais réduite et
