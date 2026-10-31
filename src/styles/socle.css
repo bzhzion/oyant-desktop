@@ -1047,7 +1047,10 @@ input[type='checkbox'].interrupteur:disabled {
   color: var(--texte-doux);
   font-size: 13px;
   line-height: 1.45;
-  max-width: 46ch;
+  /* 75ch : remplit la fenêtre à sa largeur par défaut (560 px) et borne encore la ligne en
+   * fenêtre agrandie, sous les 80 caractères de WCAG 1.4.8. À 46ch, un tiers de la largeur
+   * restait vide à droite de chaque aide (relevé par painteau le 2026-10-31). */
+  max-width: 75ch;
 }
 
 /* Le message n'occupe aucune place tant qu'il est vide : une zone reservee en permanence ferait

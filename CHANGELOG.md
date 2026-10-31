@@ -169,6 +169,9 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
   Capture, de même pour Sortie et Téléphone) ; les lecteurs d'écran les annoncent toujours. Sous
   l'onglet Transcription, où d'autres sections le précèdent, le groupe s'appelle désormais
   « Réglages de la reconnaissance ».
+- **Les textes d'aide prennent la largeur de la fenêtre** : plafonnés à 46 caractères par ligne,
+  ils laissaient un tiers de vide à droite à la largeur par défaut. Le plafond passe à 75,
+  ce qui borne encore la ligne en fenêtre agrandie.
 - **Cinq défauts d'affichage des réglages, relevés en passant chaque onglet à 560 px** : les
   boutons des cartes de modèle tombaient dans la colonne du bouton radio ; une liste au choix
   long écrasait son libellé à un mot par ligne (« Façon de dicter ») ; la ligne d'un téléphone
