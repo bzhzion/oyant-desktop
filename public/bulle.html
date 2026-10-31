@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Oyant : transcription en direct</title>
+    <!-- Aucune ligne de script : c'est le coeur Rust qui ecrit le texte dans cette page. La fenetre
+         n'a donc besoin d'aucune permission, et un contenu injecte n'y pourrait rien appeler. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #14141f;
+        color: #f2f0ec;
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        overflow: hidden;
+        user-select: none;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        box-sizing: border-box;
+        border: 1px solid #2d2d3d;
+        border-radius: 12px;
+      }
+      /* Le point rouge dit qu'on enregistre, en plus du texte : jamais la couleur seule. */
+      .point {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #e0473a;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .point {
+          animation: battement 1.2s ease-in-out infinite;
+        }
+      }
+      @keyframes battement {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      /* Deux lignes au plus : le coeur n'envoie que la fin d'une dictee longue (`bulle::fin_du_texte`),
+         parce que c'est ce qu'on vient de dire qui doit rester lisible. */
+      #texte {
+        font-size: 15px;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <span class="point" aria-hidden="true"></span>
+    <div id="texte" role="status" aria-live="polite">Je vous écoute…</div>
+  </body>
+</html>

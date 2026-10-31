@@ -13,6 +13,7 @@
 mod appairage;
 mod audio;
 mod barre;
+mod bulle;
 mod chemins;
 mod dictee;
 mod historique;

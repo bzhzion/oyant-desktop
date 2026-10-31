@@ -9,6 +9,25 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Transcription en direct : une bulle montre le texte pendant qu'on parle.** Réglage « Voir le
+  texte pendant que vous parlez » (il existait sans rien piloter), désactivé par défaut parce
+  qu'il demande du calcul pendant toute la dictée. Toutes les 1,2 s au plus, Oyant transcrit le son
+  déjà capté et met la bulle à jour, avec la même mise en forme que le texte final ; un aperçu ne
+  commence qu'une fois le précédent terminé, donc la bulle ralentit sur une machine lente au lieu
+  de s'engorger.
+
+  ⛔ **La bulle montre un aperçu, elle n'écrit rien** : taper le texte provisoire puis le corriger
+  demanderait d'effacer dans un logiciel qu'on ne contrôle pas. Le texte définitif s'écrit toujours
+  quand on relâche la touche. ⛔ **Elle ne doit jamais prendre le focus**, sinon la dictée
+  atterrirait dans Oyant : fenêtre non focalisable, clics qui la traversent, et affichage par
+  `SW_SHOWNOACTIVATE` sous Windows. Sa page n'a aucun script ni aucune permission, c'est le cœur
+  qui y écrit, en JSON pour qu'une dictée contenant une balise ne puisse rien exécuter.
+
+  ⚠️ **Non éprouvé sur un poste réel** : l'écran du poste de développement était verrouillé, où
+  Windows ignore les frappes simulées, donc un test du focus aurait été vert sans rien prouver. À
+  vérifier : bloc-notes au premier plan, réglage coché, maintenir le raccourci et parler, le texte
+  doit apparaître dans la bulle puis s'écrire dans le bloc-notes, pas dans Oyant.
+
 - **La musique se met en pause pendant la dictée, et repart dès qu'on a fini de parler.**
   Réglage « Mettre la musique en pause pendant la dictée », activé par défaut (il existait dans
   les réglages sans rien piloter). Coupure juste avant le bip de début, reprise dès l'arrêt du

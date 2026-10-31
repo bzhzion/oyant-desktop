@@ -24,10 +24,6 @@ fn reports() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
         // Etape 9 et au-dela.
         (
-            "transcription_directe",
-            "etape 9 : demande de suivre le moteur pendant qu'il travaille",
-        ),
-        (
             "mise_a_jour_automatique",
             "etape 9 : la mise a jour de l'application n'existe pas",
         ),

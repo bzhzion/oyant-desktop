@@ -296,9 +296,43 @@ impl Enregistrement {
         (par_canal as u64 * 1000 / self.taux_source.max(1) as u64) as u32
     }
 
+    /// De quoi relire le son capte jusqu'ici, depuis un autre fil, sans arreter le microphone.
+    ///
+    /// ⚠️ Existe parce que `Enregistrement` ne peut pas changer de fil : le flux de capture ne le
+    /// permet pas sous Windows. La transcription en direct tourne ailleurs, elle a donc besoin d'une
+    /// poignee qui ne porte que le tampon et son format.
+    pub fn source(&self) -> Source {
+        Source {
+            echantillons: Arc::clone(&self.echantillons),
+            taux_source: self.taux_source,
+            canaux: self.canaux,
+        }
+    }
+
     /// Arrete la capture et rend le son au format du moteur : 16 kHz, mono.
     pub fn arreter(self) -> Vec<f32> {
         drop(self.flux);
+        let brut = self
+            .echantillons
+            .lock()
+            .map(|tampon| tampon.clone())
+            .unwrap_or_default();
+        let mono = vers_mono(&brut, self.canaux);
+        reechantillonner(&mono, self.taux_source, TAUX_MOTEUR)
+    }
+}
+
+/// Le son d'un enregistrement en cours, lisible depuis un autre fil.
+#[derive(Clone)]
+pub struct Source {
+    echantillons: Arc<Mutex<Vec<f32>>>,
+    taux_source: u32,
+    canaux: u16,
+}
+
+impl Source {
+    /// Tout ce qui a ete capte jusqu'ici, au format du moteur : 16 kHz, mono.
+    pub fn lire(&self) -> Vec<f32> {
         let brut = self
             .echantillons
             .lock()

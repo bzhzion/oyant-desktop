@@ -10,12 +10,15 @@
 //! rappelle, sur une application dont la fenetre n'est meme pas visible.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Manager};
 
 use crate::barre::{self, Etat};
-use crate::{audio, chemins, historique, injection, medias, modeles, moteur, reglages, texte};
+use crate::{
+    audio, bulle, chemins, historique, injection, medias, modeles, moteur, reglages, texte,
+};
 
 /// Ce qu'il manque pour pouvoir transcrire.
 ///
@@ -183,6 +186,109 @@ pub struct Session {
     cible: Option<isize>,
     /// La musique mise en pause pour cette dictee, relancee quand la valeur est abandonnee.
     musique: medias::Reprise,
+    /// La transcription en direct, arretee et sa bulle cachee quand la valeur est abandonnee.
+    apercu: Option<Apercu>,
+}
+
+/// Intervalle entre deux apercus de la transcription en direct.
+///
+/// ⚠️ C'est un minimum, pas une cadence : un apercu ne commence qu'une fois le precedent termine.
+/// Sur un processeur lent, la bulle se met a jour moins souvent, elle ne s'engorge jamais.
+const PAS_APERCU: std::time::Duration = std::time::Duration::from_millis(1200);
+
+/// La transcription en direct d'une dictee en cours.
+///
+/// ⚠️ **L'arret passe par `Drop`**, comme la reprise de la musique : une dictee se termine par
+/// plusieurs chemins, et la bulle ne doit rester affichee sur aucun d'eux.
+struct Apercu {
+    actif: Arc<AtomicBool>,
+    app: AppHandle,
+}
+
+impl Drop for Apercu {
+    fn drop(&mut self) {
+        self.actif.store(false, Ordering::SeqCst);
+        bulle::cacher(&self.app);
+    }
+}
+
+/// Montre la bulle et lance les apercus, ou rien si le moteur ou le modele manquent.
+fn lancer_apercu(
+    app: &AppHandle,
+    source: audio::Source,
+    reglages: &reglages::Reglages,
+) -> Option<Apercu> {
+    let outils = resoudre(&reglages.modele, &reglages.langue).ok()?;
+    bulle::montrer(app);
+    let actif = Arc::new(AtomicBool::new(true));
+    let (app_fil, actif_fil, reglages_fil) = (app.clone(), Arc::clone(&actif), reglages.clone());
+    std::thread::spawn(move || boucle_apercu(app_fil, source, outils, reglages_fil, actif_fil));
+    Some(Apercu {
+        actif,
+        app: app.clone(),
+    })
+}
+
+fn boucle_apercu(
+    app: AppHandle,
+    source: audio::Source,
+    outils: Outils,
+    reglages: reglages::Reglages,
+    actif: Arc<AtomicBool>,
+) {
+    // ⚠️ Un fichier a part : la transcription finale ecrit le sien, et les deux peuvent coexister
+    // un instant quand on relache la touche pendant un apercu.
+    let fichier = std::env::temp_dir().join(format!("oyant-apercu-{}.wav", std::process::id()));
+    let prompt = moteur::prompt_des_reglages(&reglages);
+    let vad = crate::vad::selon(&reglages).ok().flatten();
+    let mut deja_lu = 0;
+
+    while actif.load(Ordering::SeqCst) {
+        std::thread::sleep(PAS_APERCU);
+        if !actif.load(Ordering::SeqCst) {
+            break;
+        }
+        let son = source.lire();
+        // Moins d'une seconde de son, ou rien de neuf depuis le dernier apercu : on attend.
+        if son.len() < audio::TAUX_MOTEUR as usize || son.len() == deja_lu {
+            continue;
+        }
+        deja_lu = son.len();
+        if audio::ecrire_wav(&fichier, &son, audio::TAUX_MOTEUR).is_err() {
+            continue;
+        }
+        let resultat = moteur::transcrire(
+            &outils.executable,
+            &moteur::Demande {
+                famille: outils.famille,
+                modele: &outils.modele,
+                audio: &fichier,
+                langue: &reglages.langue,
+                fils: reglages.fils,
+                temperature: reglages.temperature,
+                prompt: prompt.as_deref(),
+                vad: vad.as_deref(),
+            },
+        );
+        // ⛔ Revérifié APRES la transcription : un apercu qui finit apres qu'on a relache la touche
+        // ne doit pas reafficher une bulle que la fin de la dictee vient de cacher.
+        if !actif.load(Ordering::SeqCst) {
+            break;
+        }
+        if let Ok(transcription) = resultat {
+            // Meme mise en forme que le texte final : la bulle montre ce qui va s'ecrire.
+            let texte = texte::transformer(
+                transcription.texte.trim(),
+                &reglages.substitutions,
+                reglages.majuscule_automatique,
+                reglages.typographie_francaise,
+            );
+            if !texte.is_empty() {
+                bulle::ecrire(&app, &texte);
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&fichier);
 }
 
 /// L'enregistrement en cours, s'il y en a un.
@@ -263,10 +369,16 @@ fn commencer_avec(app: &AppHandle, cible: Option<isize>) {
 
     match audio::demarrer(&reglages.microphone, reglages.duree_maximale_s) {
         Ok(enregistrement) => {
+            let apercu = if reglages.transcription_directe {
+                lancer_apercu(app, enregistrement.source(), &reglages)
+            } else {
+                None
+            };
             *place = Some(Session {
                 enregistrement,
                 cible,
                 musique,
+                apercu,
             });
             let _ = barre::definir_etat(app, Etat::Enregistrement);
             let _ = barre::rafraichir_entree_dictee(app, true);
@@ -294,6 +406,8 @@ pub fn terminer(app: &AppHandle) {
     // ⚠️ La musique repart DES que le microphone est coupe, sans attendre la transcription,
     // qui peut prendre plusieurs secondes : c'est le moment ou l'utilisateur a fini de parler.
     drop(session.musique);
+    // La bulle disparait au meme moment : la suite, c'est le texte definitif.
+    drop(session.apercu);
 
     // ⚠️ Apres l'arret du microphone, donc aucun risque de s'enregistrer. Il marque la fin de
     // l'ecoute et se joue meme quand l'appui etait trop bref : le bip de debut ayant deja sonne,

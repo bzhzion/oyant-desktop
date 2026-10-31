@@ -218,6 +218,12 @@ const GROUPES: Groupe[] = [
         aide: 'À 0, Oyant reste au plus près de ce qu’il a entendu. Plus haut, il s’autorise à deviner quand il hésite.',
       },
       {
+        cle: 'live_transcription',
+        type: 'bool',
+        titre: 'Voir le texte pendant que vous parlez',
+        aide: 'Une petite bulle en bas de l’écran montre le texte au fur et à mesure. Le texte définitif s’écrit toujours quand vous relâchez la touche. Demande davantage de calcul : idéal avec une carte graphique ou le modèle Parakeet.',
+      },
+      {
         cle: 'voice_detection',
         avance: true,
         type: 'bool',
