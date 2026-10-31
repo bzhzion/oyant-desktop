@@ -520,6 +520,90 @@ body {
   margin: 0;
 }
 
+/* ── Fichiers déposés ─────────────────────────────────────────────────────────────── */
+
+/* Le voile n'intercepte rien (`pointer-events: none`) : c'est Tauri qui reçoit le dépôt, la page
+ * ne fait que le montrer. */
+.depot-voile {
+  position: fixed;
+  inset: calc(var(--pas) * 1.5);
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--rayon);
+  background: rgb(14 14 22 / 0.88);
+  color: var(--texte);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.depot-panneau {
+  position: fixed;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  overflow-y: auto;
+  padding: calc(var(--pas) * 2) calc(var(--pas) * 2.5);
+  background: var(--bg);
+  border-top: 1px solid var(--bordure);
+}
+
+.depot-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: calc(var(--pas) * 2);
+}
+
+.depot-entete h2 {
+  margin: 0;
+  font-family: var(--titre);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.depot-liste {
+  display: grid;
+  gap: calc(var(--pas) * 1.5);
+}
+
+.depot-carte {
+  display: grid;
+  gap: var(--pas);
+  padding: calc(var(--pas) * 1.5);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon);
+  background: var(--surface);
+}
+
+.depot-carte p {
+  margin: 0;
+}
+
+/* ⚠️ Le message d'erreur reste en couleur de TEXTE : `--danger` sur ce fond n'atteint pas les
+ * 4,5:1 d'un texte. Le rouge porte sur le filet, élément non textuel, au seuil de 3:1. */
+.depot-erreur {
+  padding-left: var(--pas);
+  border-left: 3px solid var(--danger);
+  color: var(--texte) !important;
+}
+
+.depot-texte {
+  width: 100%;
+  padding: calc(var(--pas) * 0.75);
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--texte);
+  font-family: var(--corps);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 /* Le test du raccourci occupe toute la largeur de sa ligne, sous le libellé et le champ. */
 .test-raccourci {
   grid-column: 1 / -1;

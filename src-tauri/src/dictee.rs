@@ -275,7 +275,7 @@ impl Apercu {
 ///
 /// ⛔ **Une seule fonction pour le texte final ET la bulle** : deux copies de cette chaine
 /// finiraient par diverger, et la bulle montrerait alors autre chose que ce qui va s'ecrire.
-fn mettre_en_forme(brut: &str, reglages: &reglages::Reglages) -> String {
+pub fn mettre_en_forme(brut: &str, reglages: &reglages::Reglages) -> String {
     let mut texte = brut.to_string();
     if reglages.supprimer_hesitations {
         texte = texte::supprimer_hesitations(&texte);

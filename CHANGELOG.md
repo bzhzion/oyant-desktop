@@ -9,6 +9,15 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Transcrire un fichier audio en le déposant dans la fenêtre** (wav, mp3, ogg, flac ; wav
+  seulement avec SenseVoice). Les fichiers passent un par un, avec les réglages de la dictée
+  (modèle, langue, détection de parole, hésitations, vocabulaire, substitutions) : même voix,
+  même texte. Le résultat s'affiche dans un panneau, se copie, ou s'enregistre en `.txt` à côté
+  du fichier, sans jamais écraser un texte existant (numérotation, prouvé rouge). Il n'est ni écrit
+  au curseur ni ajouté à l'historique. Un format que le moteur ne lit pas (`.m4a`) est refusé en
+  le nommant. Essayé sur un vrai extrait LibriVox : le mp3 donne le même texte que le wav, avec
+  Medium (5,4 s pour 20 s) comme avec Parakeet (4,5 s).
+
 - **« Tester le raccourci »**, sous le champ du raccourci : pendant huit secondes, le prochain
   appui est signalé à l'écran au lieu de lancer une dictée. Si rien n'arrive, l'écran dit qu'un
   autre logiciel (jeu, anti-triche, outil de capture ou de sécurité) garde la combinaison pour lui.

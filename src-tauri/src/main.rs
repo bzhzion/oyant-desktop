@@ -17,6 +17,7 @@ mod bulle;
 mod chemins;
 mod dictee;
 mod ecran;
+mod fichiers;
 mod historique;
 mod injection;
 mod medias;
@@ -384,6 +385,8 @@ fn interface(fenetre_visible: bool) {
             composer_raccourci,
             suspendre_raccourci,
             tester_raccourci,
+            fichiers::transcrire_fichier,
+            fichiers::enregistrer_texte_a_cote,
             historique::etat_historique,
             historique::effacer_historique
         ])

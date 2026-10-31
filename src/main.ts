@@ -6,6 +6,7 @@ import { brancherReglages } from './reglages';
 import { brancherModeles, brancherMoteurs } from './modeles';
 import { installerAppairage } from './appairage';
 import { installerOnglets } from './onglets';
+import { installerDepot } from './fichiers';
 
 type Etat = { version: string; plateforme: string; injection: string };
 
@@ -146,6 +147,7 @@ async function brancherProblemesDeDictee(): Promise<void> {
 }
 
 installerOnglets();
+installerDepot();
 void brancherCommandes();
 void afficherEtat();
 poserCopyright();
