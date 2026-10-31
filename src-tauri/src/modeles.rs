@@ -44,6 +44,51 @@ pub struct Modele {
     pub description: &'static str,
     /// Le programme qui sait lire ce modele.
     pub famille: Famille,
+    /// Les langues couvertes, telles qu'on les dit a l'ecran.
+    pub langues: &'static str,
+}
+
+/// Ce que `scripts/mesurer-modeles.py` a mesure, integre a la compilation.
+///
+/// ⛔ **Ces chiffres ne s'ecrivent jamais a la main** : un nombre tape a cote du code qu'il decrit
+/// finit par mentir. Le fichier dit lui-meme sur quelle machine et quel corpus il a ete produit,
+/// et l'ecran le repete sous le tableau.
+const MESURES: &str = include_str!("../mesures-modeles.json");
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
+pub struct Mesure {
+    pub fois_plus_rapide_que_la_parole: f64,
+    pub erreurs_pour_cent: f64,
+    pub erreurs_pour_cent_pire_voix: f64,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
+pub struct ContexteMesures {
+    pub date: String,
+    pub machine: String,
+    pub corpus: String,
+    pub script: String,
+}
+
+#[derive(serde::Deserialize)]
+struct FichierMesures {
+    mesure: ContexteMesures,
+    modeles: std::collections::BTreeMap<String, Mesure>,
+}
+
+fn fichier_mesures() -> Option<FichierMesures> {
+    serde_json::from_str(MESURES).ok()
+}
+
+/// La mesure d'un modele, `None` s'il n'a pas ete mesure.
+pub fn mesure(identifiant: &str) -> Option<Mesure> {
+    fichier_mesures()?.modeles.remove(identifiant)
+}
+
+/// Dans quelles conditions les mesures ont ete prises, pour la legende du tableau.
+#[tauri::command]
+pub fn contexte_mesures() -> Option<ContexteMesures> {
+    fichier_mesures().map(|f| f.mesure)
 }
 
 /// Deux familles de modeles, deux programmes, et surtout deux jeux d'options.
@@ -93,6 +138,7 @@ pub const CATALOGUE: &[Modele] = &[
         empreinte: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         description: "Le plus rapide, et le plus leger a telecharger. Suffisant pour dicter des phrases courtes.",
         famille: Famille::Whisper,
+        langues: "99 langues",
     },
     Modele {
         identifiant: "medium",
@@ -103,6 +149,7 @@ pub const CATALOGUE: &[Modele] = &[
         empreinte: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
         description: "Le bon compromis entre precision et rapidite pour un usage quotidien.",
         famille: Famille::Whisper,
+        langues: "99 langues",
     },
     Modele {
         identifiant: "large-v3",
@@ -113,6 +160,7 @@ pub const CATALOGUE: &[Modele] = &[
         empreinte: "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
         description: "Le plus precis, mais lourd a telecharger et plus lent a la transcription.",
         famille: Famille::Whisper,
+        langues: "99 langues",
     },
     // ⚠️ **q8_0 et pas f16** : mesure le 2026-10-29 sur trois lecteurs LibriVox en francais,
     // les deux rendent le MEME texte au caractere pres, et q8_0 pese moitie moins (669 Mo contre
@@ -128,6 +176,7 @@ pub const CATALOGUE: &[Modele] = &[
         // les decouvrir apres coup, c'est croire que le vocabulaire ou le coreen sont casses.
         description: "Deux à trois fois plus rapide que Small, souvent plus juste en français. Langues européennes seulement (pas de coréen), sans vocabulaire personnalisé. Utilise la carte graphique si vous l'avez choisie.",
         famille: Famille::Parakeet,
+        langues: "25 langues européennes, sans le coréen",
     },
 ];
 
@@ -157,6 +206,9 @@ pub struct EtatModele {
     /// telecharge : painteau a dicte sans savoir avec quoi, le 2026-09-18. Un reglage present a
     /// deux endroits, ou absent de celui ou on le cherche, revient au meme defaut.
     pub actif: bool,
+    pub langues: String,
+    /// Vitesse et taux d'erreurs mesures par `scripts/mesurer-modeles.py`, `None` si absent.
+    pub mesure: Option<Mesure>,
 }
 
 /// Progression envoyee a l'interface pendant un telechargement.
@@ -281,6 +333,8 @@ fn etat_de(app: &AppHandle, modele: &Modele, choisi: &str) -> EtatModele {
         complet,
         verifie,
         reprise_possible: !complet && octets_partiels > 0,
+        langues: modele.langues.to_string(),
+        mesure: mesure(modele.identifiant),
     }
 }
 
@@ -611,6 +665,31 @@ mod tests {
             }
         }
         assert_eq!(refusees, vec!["ko".to_string()]);
+    }
+
+    /// ⛔ **Un modele ajoute au catalogue sans etre mesure aurait une ligne vide dans le tableau
+    /// de comparaison**, et rien ne le signalerait. Ce test oblige a relancer
+    /// `scripts/mesurer-modeles.py`, qui est aussi le seul a pouvoir ecrire ces chiffres.
+    #[test]
+    fn chaque_modele_du_catalogue_est_mesure() {
+        let fichier = fichier_mesures().expect("mesures-modeles.json illisible");
+        assert!(!fichier.mesure.date.is_empty() && !fichier.mesure.machine.is_empty());
+        for modele in CATALOGUE {
+            let m = fichier
+                .modeles
+                .get(modele.identifiant)
+                .unwrap_or_else(|| panic!("{} n'est pas mesure", modele.identifiant));
+            assert!(
+                m.fois_plus_rapide_que_la_parole > 0.0,
+                "{}",
+                modele.identifiant
+            );
+            assert!(
+                m.erreurs_pour_cent <= m.erreurs_pour_cent_pire_voix,
+                "{}",
+                modele.identifiant
+            );
+        }
     }
 
     #[test]

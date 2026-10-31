@@ -339,6 +339,7 @@ fn interface(fenetre_visible: bool) {
             serveur::reseau_revoquer,
             serveur::reseau_repondre,
             modeles::etat_modeles,
+            modeles::contexte_mesures,
             modeles::telecharger_modele,
             modeles::verifier_modele,
             modeles::supprimer_modele,

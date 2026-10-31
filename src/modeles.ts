@@ -23,7 +23,109 @@ export type EtatModele = {
   reprise_possible: boolean;
   /** C'est ce modèle qui sert aux transcriptions. */
   actif: boolean;
+  langues: string;
+  mesure: Mesure | null;
 };
+
+type Mesure = {
+  fois_plus_rapide_que_la_parole: number;
+  erreurs_pour_cent: number;
+  erreurs_pour_cent_pire_voix: number;
+};
+
+type ContexteMesures = { date: string; machine: string; corpus: string; script: string };
+
+let contexte: ContexteMesures | null = null;
+
+/** Nombre a la francaise : virgule decimale, et pas de « ,0 » inutile. */
+function nombre(valeur: number): string {
+  return valeur.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
+
+/**
+ * Le temps de transcription d'une minute dictee, tire de la vitesse mesuree.
+ *
+ * ⚠️ Affiche en duree et pas en « × la parole » : « 0,7 × » ne dit a personne que Large v3 met
+ * plus d'une minute a transcrire une minute, alors que « 1 min 26 s » le dit tout de suite.
+ */
+function pourUneMinute(foisPlusRapide: number): string {
+  const secondes = Math.round(60 / foisPlusRapide);
+  if (secondes < 60) return `${secondes} s`;
+  const reste = secondes % 60;
+  return reste === 0 ? `${secondes / 60} min` : `${Math.floor(secondes / 60)} min ${reste} s`;
+}
+
+/**
+ * Le tableau qui compare les modeles cote a cote : taille, langues, vitesse, erreurs.
+ *
+ * ⛔ **Les chiffres viennent de `src-tauri/mesures-modeles.json`, ecrit par
+ * `scripts/mesurer-modeles.py`**, jamais tapes ici. La legende dit sur quelle machine et quel
+ * corpus ils ont ete mesures : une vitesse sans sa machine ne veut rien dire.
+ *
+ * ⚠️ **La colonne « pire voix » n'est pas un detail.** Parakeet est le plus juste en moyenne sur
+ * deux voix et rend un texte inutilisable sur la troisieme : une moyenne seule cacherait
+ * exactement le risque que quelqu'un doit connaitre avant de choisir.
+ *
+ * ⚠️ Un vrai `<table>` avec `scope` et `<caption>`, pas des `div` alignes : un lecteur d'ecran
+ * annonce alors l'en-tete de colonne a chaque cellule. Le conteneur defile horizontalement si la
+ * fenetre est etroite, et il est atteignable au clavier pour pouvoir le faire defiler.
+ */
+function tableauComparatif(): HTMLElement {
+  const conteneur = document.createElement('div');
+  conteneur.className = 'comparatif';
+  conteneur.tabIndex = 0;
+  conteneur.setAttribute('role', 'region');
+  conteneur.setAttribute('aria-label', 'Comparaison des modèles');
+
+  const tableau = document.createElement('table');
+  const legende = document.createElement('caption');
+  legende.textContent = 'Comparer les modèles';
+  tableau.append(legende);
+
+  const tete = tableau.createTHead().insertRow();
+  for (const titre of ['Modèle', 'Taille', 'Langues', '1 min dictée', 'Erreurs', 'Pire voix']) {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.textContent = titre;
+    tete.append(th);
+  }
+
+  const corps = tableau.createTBody();
+  for (const etat of etats) {
+    const ligne = corps.insertRow();
+    if (etat.actif) ligne.className = 'comparatif-actif';
+    const nom = document.createElement('th');
+    nom.scope = 'row';
+    nom.textContent = etat.actif ? `${etat.nom} (utilisé)` : etat.nom;
+    ligne.append(nom);
+    const m = etat.mesure;
+    for (const valeur of [
+      taille(etat.taille_attendue),
+      etat.langues,
+      m ? pourUneMinute(m.fois_plus_rapide_que_la_parole) : 'non mesuré',
+      m ? `${nombre(m.erreurs_pour_cent)} %` : 'non mesuré',
+      m ? `${nombre(m.erreurs_pour_cent_pire_voix)} %` : 'non mesuré',
+    ]) {
+      ligne.insertCell().textContent = valeur;
+    }
+  }
+  conteneur.append(tableau);
+
+  if (contexte) {
+    const note = document.createElement('p');
+    note.className = 'comparatif-note';
+    // ⚠️ La vitesse est celle du PROCESSEUR seul : avec une carte graphique, tout va plus vite,
+    // et le dire evite de croire qu'un modele lent le restera.
+    note.textContent =
+      `« 1 min dictée » : temps de transcription d’une minute de parole. ` +
+      `Erreurs : part des mots faux, manquants ou en trop, comparés au texte lu, en moyenne puis ` +
+      `sur la voix la plus difficile. ` +
+      `Mesuré le ${new Date(contexte.date).toLocaleDateString('fr-FR')} sur ${contexte.machine}, ` +
+      `${contexte.corpus}. Avec une carte graphique, tout va plus vite.`;
+    conteneur.append(note);
+  }
+  return conteneur;
+}
 
 type Progression = { identifiant: string; recus: number; total: number };
 
@@ -33,7 +135,8 @@ const enCours = new Set<string>();
 /** Taille lisible. Les modeles pesent des centaines de Mo, l'octet ne dit rien a personne. */
 function taille(octets: number): string {
   const mo = octets / 1_000_000;
-  if (mo >= 1000) return `${(mo / 1000).toFixed(2)} Go`;
+  // Virgule decimale : « 1.53 Go » est une ecriture anglaise dans une interface francaise.
+  if (mo >= 1000) return `${(mo / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Go`;
   return `${Math.round(mo)} Mo`;
 }
 
@@ -91,6 +194,7 @@ function dessiner(): void {
   const hote = document.getElementById('modeles');
   if (!hote) return;
   hote.textContent = '';
+  hote.append(tableauComparatif());
 
   // ⛔ **Le modele se choisit ICI et nulle part ailleurs** (arbitre par painteau le 2026-09-18).
   // Il y avait en plus une liste deroulante dans les reglages : painteau a dicte sans savoir avec
@@ -473,6 +577,8 @@ export async function brancherModeles(): Promise<void> {
   // deux branchements partent en parallèle, donc s'appuyer sur l'ordre laissait la liste VIDE une
   // fois sur deux. Défaut invisible au typage et sans message, vu seulement sur une capture.
   try {
+    // Avant la liste : le tableau se dessine avec elle, et sa légende en dépend.
+    contexte = await invoke<ContexteMesures | null>('contexte_mesures');
     await rafraichir();
   } catch (erreur) {
     dire('La liste des modèles n’a pas pu être lue.', true);

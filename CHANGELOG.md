@@ -9,6 +9,31 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Un tableau compare les modèles avant de choisir** : taille, langues, temps de transcription
+  d'une minute dictée, taux d'erreurs en moyenne et sur la voix la plus difficile. Mesuré le
+  2026-10-31 sur un Intel Core i5-9400F sans carte graphique, trois lectures LibriVox en
+  français comparées au texte des livres :
+
+  | Modèle | 1 min dictée | Erreurs | Pire voix |
+  |---|---|---|---|
+  | Small | 16 s | 18,4 % | 20 % |
+  | Medium | 43 s | 11,2 % | 17,7 % |
+  | Large v3 | 1 min 26 s | 7,8 % | 11,2 % |
+  | Parakeet v3 | 9 s | 38,6 % | 90,3 % |
+
+  ⛔ **Ces chiffres ne s'écrivent jamais à la main** : `scripts/mesurer-modeles.py` les produit
+  dans `src-tauri/mesures-modeles.json`, que l'application intègre à la compilation, et un test
+  refuse un modèle du catalogue qui n'y figure pas. La référence de chaque extrait est choisie
+  pour minimiser la somme des écarts de **tous** les modèles, jamais d'un seul.
+
+  ⚠️ **La colonne « pire voix » est ce qui rend le tableau honnête** : Parakeet est plus juste que
+  Small sur deux voix sur trois, et rend un texte inutilisable sur la troisième. Une moyenne seule
+  l'aurait caché, ou un seul extrait aurait donné l'une ou l'autre conclusion, toutes deux fausses.
+
+  Vérifié dans un navigateur aux largeurs de la fenêtre (560 px et 460 px au minimum) : rien ne
+  déborde. Vrai `<table>` avec en-têtes de colonne et de ligne, et le modèle utilisé est dit en
+  toutes lettres, pas seulement par une couleur.
+
 - **Détection de parole (Silero VAD) avant Whisper, activée par défaut.** Le moteur ne reçoit
   plus que les moments où quelqu'un parle. Mesuré le 2026-10-29, elle corrige deux défauts :
   - **Whisper inventait des phrases sur du bruit.** Six secondes de souffle de ventilation, assez
@@ -50,6 +75,8 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Modifié
 
+- **Les tailles s'écrivent à la française** (« 1,53 Go » et non « 1.53 Go »), dans le tableau
+  comme sur les fiches des modèles.
 - **La vérification macOS passe par `rigel`, le Mac dédié du parc**, après qu'un job sur Mac de
   GitHub a attendu quinze minutes sans machine puis a été annulé sans rien exécuter. ⛔ **Sauf
   pour une pull request**, qui garde le Mac jetable de GitHub : le dépôt est public, et GitHub ne

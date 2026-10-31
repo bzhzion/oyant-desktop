@@ -1,0 +1,30 @@
+{
+  "mesure": {
+    "date": "2026-10-31",
+    "machine": "un Intel Core i5-9400F (6 cœurs), sans carte graphique",
+    "corpus": "3 lectures LibriVox en français, 30 s chacune",
+    "script": "scripts/mesurer-modeles.py"
+  },
+  "modeles": {
+    "small": {
+      "fois_plus_rapide_que_la_parole": 3.7,
+      "erreurs_pour_cent": 18.4,
+      "erreurs_pour_cent_pire_voix": 20.0
+    },
+    "medium": {
+      "fois_plus_rapide_que_la_parole": 1.4,
+      "erreurs_pour_cent": 11.2,
+      "erreurs_pour_cent_pire_voix": 17.7
+    },
+    "large-v3": {
+      "fois_plus_rapide_que_la_parole": 0.7,
+      "erreurs_pour_cent": 7.8,
+      "erreurs_pour_cent_pire_voix": 11.2
+    },
+    "parakeet-v3": {
+      "fois_plus_rapide_que_la_parole": 7.0,
+      "erreurs_pour_cent": 38.6,
+      "erreurs_pour_cent_pire_voix": 90.3
+    }
+  }
+}

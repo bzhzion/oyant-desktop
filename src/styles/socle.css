@@ -689,6 +689,73 @@ body {
   line-height: 1.45;
 }
 
+/* Tableau de comparaison des modeles. Il defile horizontalement quand la fenetre est etroite,
+ * plutot que d'ecraser ses colonnes : une vitesse coupee sur trois lignes ne se compare plus. */
+.comparatif {
+  margin: 0 0 calc(var(--pas) * 2);
+  overflow-x: auto;
+  border-radius: var(--rayon);
+}
+
+.comparatif:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ⚠️ Le texte revient a la ligne : la fenetre d'Oyant fait 560 px, et un `nowrap` donnait 771 px
+ * de tableau a faire defiler de cote. Seuls les chiffres restent d'un bloc, pour qu'une duree ou
+ * un taux ne soit jamais coupe en deux. */
+.comparatif table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.comparatif td:nth-child(n + 4),
+.comparatif td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.comparatif caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: var(--pas);
+}
+
+.comparatif th,
+.comparatif td {
+  /* 6 px de cote et pas 8 : a la largeur minimale de la fenetre (460 px), 8 px faisaient
+   * deborder le tableau de 3 px, donc defiler de cote pour rien. */
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.comparatif thead th {
+  color: var(--texte-doux);
+  font-weight: 500;
+}
+
+.comparatif tbody th {
+  font-weight: 600;
+}
+
+/* ⚠️ Le modele utilise est dit en toutes lettres dans sa cellule (« utilisé ») : le fond ne fait
+ * que le souligner, WCAG 1.4.1 interdisant qu'il soit la seule information. */
+.comparatif-actif {
+  background: var(--surface-haute);
+}
+
+.comparatif-note {
+  margin: var(--pas) 0 0;
+  max-width: 70ch;
+  color: var(--texte-doux);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
 /* Element natif : la progression est annoncee et comprise sans rien reconstruire. */
 .progression {
   width: 100%;
