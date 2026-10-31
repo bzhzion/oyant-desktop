@@ -75,6 +75,10 @@ pub struct Reglages {
     // Capture
     #[serde(rename = "hotkey")]
     pub raccourci: String,
+    /// `maintien` : on parle tant que la touche est enfoncee. `bascule` : un appui ouvre le micro,
+    /// le suivant le ferme. Voir `raccourci::action`.
+    #[serde(rename = "hotkey_mode")]
+    pub mode_raccourci: String,
     /// Nom du microphone a utiliser. **Vide veut dire « celui du systeme »**, et c'est le defaut.
     ///
     /// ⚠️ Vide n'est pas « aucun » : c'est le seul reglage qui suive l'utilisateur quand il
@@ -195,6 +199,7 @@ impl Default for Reglages {
     fn default() -> Self {
         Self {
             raccourci: "Ctrl+Alt+Space".to_string(),
+            mode_raccourci: "maintien".to_string(),
             microphone: String::new(),
             duree_minimale_ms: 300,
             duree_maximale_s: 120,
@@ -267,6 +272,7 @@ impl Default for Reglages {
 /// trouve le 2026-09-17 avant d'avoir pu nuire, et exactement celui contre lequel l'ecran des
 /// modeles se premunit deja en derivant sa propre liste.
 const NIVEAUX_JOURNAL: [&str; 4] = ["error", "warn", "info", "debug"];
+const MODES_RACCOURCI: [&str; 2] = ["maintien", "bascule"];
 
 fn modele_connu(identifiant: &str) -> bool {
     crate::modeles::par_identifiant(identifiant).is_some()
@@ -280,6 +286,12 @@ impl Reglages {
     /// `min`/`max` d'un champ HTML ne sont pas appliquees a une valeur posee par programme).
     pub fn normaliser(&mut self) {
         let defauts = Reglages::default();
+
+        // Une valeur inconnue retombe sur le maintien : c'est le mode ou le micro ne peut pas
+        // rester ouvert par oubli.
+        if !MODES_RACCOURCI.contains(&self.mode_raccourci.as_str()) {
+            self.mode_raccourci = defauts.mode_raccourci.clone();
+        }
 
         self.duree_minimale_ms = self.duree_minimale_ms.clamp(0, 5_000);
         self.duree_maximale_s = self.duree_maximale_s.clamp(5, 3_600);

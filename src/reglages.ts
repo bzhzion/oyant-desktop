@@ -23,6 +23,7 @@ export type Substitution = { from: string; to: string; case_sensitive: boolean }
 
 export type Reglages = {
   hotkey: string;
+  hotkey_mode: string;
   microphone: string;
   min_duration_ms: number;
   max_duration_s: number;
@@ -91,7 +92,17 @@ const GROUPES: Groupe[] = [
         cle: 'hotkey',
         type: 'texte',
         titre: 'Raccourci global',
-        aide: 'Les touches à maintenir enfoncées pour dicter. Oyant écoute tant que vous les gardez appuyées.',
+        aide: 'Les touches qui déclenchent la dictée, depuis n’importe quelle application.',
+      },
+      {
+        cle: 'hotkey_mode',
+        type: 'choix',
+        titre: 'Façon de dicter',
+        options: [
+          ['maintien', 'Maintenir les touches pendant que je parle'],
+          ['bascule', 'Appuyer une fois pour commencer, une fois pour finir'],
+        ],
+        aide: 'En mode « une fois pour commencer », l’icône d’Oyant devient rouge et une bulle en bas de l’écran rappelle que le micro est ouvert, jusqu’à votre second appui.',
       },
       {
         cle: 'microphone',

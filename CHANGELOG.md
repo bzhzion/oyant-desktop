@@ -9,6 +9,17 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Mode bascule du raccourci : un appui pour commencer, un appui pour finir.** Réglage « Façon
+  de dicter », le maintien reste le défaut. ⛔ **Accepté par painteau le 2026-10-31 à une
+  condition, qu'un micro ouvert sans touche tenue se voie** : l'icône passe au rouge, ET la bulle
+  s'affiche en bas de l'écran (« Enregistrement en cours. Appuyez de nouveau sur … pour
+  terminer. »), parce que l'icône est souvent cachée dans la zone de débordement de Windows 11.
+  Le menu de l'icône, qui basculait déjà sans aucun rappel, reçoit le même, avec le bon geste
+  (« Arrêter la dictée »). ⛔ **Windows répète l'appui tant que la touche est tenue** : en bascule,
+  ces répétitions ouvriraient et fermeraient le micro en boucle, elles sont ignorées jusqu'au
+  relâchement. Décision isolée dans une fonction pure (`raccourci::action`), test prouvé rouge en
+  retirant ce garde-fou. Le mode est relu à chaque appui, il vaut sans relancer Oyant.
+
 - **Transcription en direct : une bulle montre le texte pendant qu'on parle.** Réglage « Voir le
   texte pendant que vous parlez » (il existait sans rien piloter), désactivé par défaut parce
   qu'il demande du calcul pendant toute la dictée. Toutes les 1,2 s au plus, Oyant transcrit le son

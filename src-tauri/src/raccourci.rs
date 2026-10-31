@@ -1,14 +1,51 @@
 //! Le raccourci global : la seule chose qui declenche une dictee.
 //!
-//! ⛔ **Il doit rendre l'appui ET le relachement.** Le raccourci d’Oyant se TIENT enfonce : on
-//! parle pendant, et relacher lance la transcription. Un raccourci a bascule laisserait un
-//! microphone ouvert sans que rien ne le rappelle, dans une application dont la fenetre n'est
-//! meme pas affichee.
+//! Deux modes. **Maintien** (le defaut) : on parle tant que la touche est enfoncee, relacher lance
+//! la transcription. **Bascule** : un appui ouvre le micro, le suivant le ferme.
+//!
+//! ⛔ **La bascule a d'abord ete ecartee, puis acceptee le 2026-10-31 a une condition** : un micro
+//! ouvert sans rien pour le rappeler. Elle est donc accompagnee d'un rappel visible tant que le
+//! micro est ouvert (l'icone rouge, ET la bulle, parce que l'icone est souvent cachee dans la zone
+//! de debordement de Windows 11). Retirer ce rappel rouvrirait le defaut d'origine.
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::dictee;
+
+/// Ce qu'un evenement du raccourci doit declencher.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Commencer,
+    Terminer,
+    Rien,
+}
+
+/// Decide de l'action, sans clavier ni micro : fonction PURE, testee a part.
+///
+/// - `bascule` : le mode choisi,
+/// - `appui` : l'evenement est un appui (sinon un relachement),
+/// - `deja_enfoncee` : la touche etait deja enfoncee avant cet appui,
+/// - `en_cours` : une dictee est deja en cours.
+///
+/// ⛔ **Windows repete l'appui tant que la touche est tenue.** En bascule, ces repetitions
+/// ouvriraient et fermeraient le micro en boucle : un appui qui arrive alors que la touche est deja
+/// enfoncee est une repetition, on l'ignore.
+pub fn action(bascule: bool, appui: bool, deja_enfoncee: bool, en_cours: bool) -> Action {
+    match (bascule, appui) {
+        (false, true) => Action::Commencer,
+        (false, false) => Action::Terminer,
+        (true, false) => Action::Rien,
+        (true, true) if deja_enfoncee => Action::Rien,
+        (true, true) if en_cours => Action::Terminer,
+        (true, true) => Action::Commencer,
+    }
+}
+
+/// La touche est-elle tenue en ce moment, d'apres les evenements recus.
+static ENFONCEE: AtomicBool = AtomicBool::new(false);
 
 /// Traduit le libelle des reglages vers ce que le greffon attend.
 ///
@@ -68,15 +105,21 @@ pub fn enregistrer(app: &AppHandle, libelle: &str) -> Result<(), String> {
 
     gestionnaire
         .on_shortcut(raccourci, move |app, _raccourci, evenement| {
-            match evenement.state() {
-                ShortcutState::Pressed => {
-                    eprintln!("raccourci : appui");
+            let appui = evenement.state() == ShortcutState::Pressed;
+            let deja_enfoncee = ENFONCEE.swap(appui, Ordering::SeqCst) && appui;
+            // Relu a chaque evenement : changer de mode dans les reglages vaut tout de suite,
+            // sans reenregistrer le raccourci.
+            let bascule = crate::reglages::lire_sans_application().mode_raccourci == "bascule";
+            match action(bascule, appui, deja_enfoncee, dictee::en_cours(app)) {
+                Action::Commencer => {
+                    eprintln!("raccourci : début");
                     dictee::commencer(app);
                 }
-                ShortcutState::Released => {
-                    eprintln!("raccourci : relâchement");
+                Action::Terminer => {
+                    eprintln!("raccourci : fin");
                     dictee::terminer(app);
                 }
+                Action::Rien => {}
             }
         })
         .map_err(|erreur| {
@@ -125,6 +168,27 @@ mod tests {
     /// ⚠️ Une touche inconnue passe telle quelle : c'est au greffon de la refuser, avec son
     /// vocabulaire a lui. La traduire au hasard produirait un raccourci silencieusement different
     /// de celui qui est ecrit dans les reglages.
+    #[test]
+    fn en_maintien_appui_commence_et_relachement_termine() {
+        assert_eq!(action(false, true, false, false), Action::Commencer);
+        assert_eq!(action(false, false, true, true), Action::Terminer);
+    }
+
+    #[test]
+    fn en_bascule_un_appui_ouvre_puis_le_suivant_ferme() {
+        assert_eq!(action(true, true, false, false), Action::Commencer);
+        assert_eq!(action(true, false, true, true), Action::Rien);
+        assert_eq!(action(true, true, false, true), Action::Terminer);
+    }
+
+    /// ⛔ Le cas qui justifie `deja_enfoncee` : sans lui, garder la touche un peu longtemps
+    /// ouvrirait et fermerait le micro a chaque repetition du clavier.
+    #[test]
+    fn en_bascule_la_repetition_du_clavier_est_ignoree() {
+        assert_eq!(action(true, true, true, true), Action::Rien);
+        assert_eq!(action(true, true, true, false), Action::Rien);
+    }
+
     #[test]
     fn une_touche_inconnue_n_est_pas_devinee() {
         assert_eq!(normaliser("Ctrl+Inconnue"), "CommandOrControl+Inconnue");

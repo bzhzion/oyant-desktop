@@ -205,6 +205,32 @@ struct Apercu {
     app: AppHandle,
 }
 
+impl Apercu {
+    /// La bulle seule, sans transcription en direct : le rappel qu'un micro est ouvert.
+    fn rappel(app: &AppHandle, message: &str) -> Apercu {
+        bulle::montrer(app);
+        bulle::ecrire(app, message);
+        Apercu {
+            actif: Arc::new(AtomicBool::new(true)),
+            app: app.clone(),
+        }
+    }
+}
+
+/// Le texte du rappel affiche quand le micro reste ouvert sans qu'on tienne une touche.
+///
+/// Fonction PURE : il nomme le geste qui arrete, et ce geste depend de ce qui a lance la dictee.
+pub fn message_de_rappel(depuis_le_menu: bool, raccourci: &str) -> String {
+    if depuis_le_menu {
+        format!(
+            "Enregistrement en cours. Choisissez « {} » dans le menu d'Oyant pour terminer.",
+            barre::ARRETER
+        )
+    } else {
+        format!("Enregistrement en cours. Appuyez de nouveau sur {raccourci} pour terminer.")
+    }
+}
+
 impl Drop for Apercu {
     fn drop(&mut self) {
         self.actif.store(false, Ordering::SeqCst);
@@ -369,8 +395,17 @@ fn commencer_avec(app: &AppHandle, cible: Option<isize>) {
 
     match audio::demarrer(&reglages.microphone, reglages.duree_maximale_s) {
         Ok(enregistrement) => {
+            // ⛔ Le rappel est la CONDITION du mode bascule (arbitrage du 2026-10-31) : un micro
+            // ouvert sans touche tenue doit se voir, et l'icone seule est souvent cachee. Le menu
+            // de l'icone bascule aussi, il recoit donc le meme rappel.
+            let sans_touche_tenue = reglages.mode_raccourci == "bascule" || cible.is_some();
             let apercu = if reglages.transcription_directe {
                 lancer_apercu(app, enregistrement.source(), &reglages)
+            } else if sans_touche_tenue {
+                Some(Apercu::rappel(
+                    app,
+                    &message_de_rappel(cible.is_some(), &reglages.raccourci),
+                ))
             } else {
                 None
             };
@@ -603,6 +638,18 @@ fn signaler(app: &AppHandle, message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Le rappel nomme le geste qui arrete, et ce geste n'est pas le meme selon ce qui a lance la
+    /// dictee : renvoyer vers le raccourci quelqu'un qui est passe par le menu le laisserait sans
+    /// moyen evident de fermer le micro.
+    #[test]
+    fn le_rappel_nomme_le_bon_geste() {
+        let raccourci = message_de_rappel(false, "Ctrl+Alt+Space");
+        assert!(raccourci.contains("Ctrl+Alt+Space"), "{raccourci}");
+        let menu = message_de_rappel(true, "Ctrl+Alt+Space");
+        assert!(menu.contains(barre::ARRETER), "{menu}");
+        assert!(!menu.contains("Ctrl+Alt+Space"), "{menu}");
+    }
 
     /// ⛔ **Garde la confusion des causes.** « Le modele n'est pas telecharge » et « le moteur
     /// n'est pas installe » demandent deux gestes differents : un message identique obligerait a
