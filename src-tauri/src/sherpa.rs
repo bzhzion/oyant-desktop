@@ -18,6 +18,16 @@ use crate::moteur::{FormatArchive, deballer, empreinte_de, format_archive};
 /// Une publication de sherpa-onnx pour une plateforme.
 ///
 /// ⚠️ Taille et empreinte RELEVEES sur l'API GitHub (champ `digest`) le 2026-10-31.
+///
+/// Jamais construit sur une plateforme sans publication retenue (macOS, ARM) : le lint le
+/// signalerait comme du code mort, alors que c'est l'absence voulue de `PROGRAMME`.
+#[cfg_attr(
+    not(any(
+        all(windows, target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "x86_64")
+    )),
+    allow(dead_code)
+)]
 struct Programme {
     url: &'static str,
     taille: u64,

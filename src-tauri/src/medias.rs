@@ -19,6 +19,11 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 /// Ce que le systeme dit d'un lecteur.
+///
+/// ⚠️ Sur une plateforme sans controle des medias branche (macOS aujourd'hui), aucun lecteur n'est
+/// jamais lu, donc `Autre` n'y est jamais construit : le lint de la CI macOS le refusait. On le dit
+/// ici plutot que de retirer une variante dont Windows et Linux ont besoin.
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lecture {
     EnCours,

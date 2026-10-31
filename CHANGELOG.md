@@ -160,6 +160,11 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **La CI macOS était rouge depuis l'ajout de la pause de la musique** : sans contrôle des médias
+  sur macOS, `Lecture::Autre` n'y est jamais construit, et le lint refuse le code mort. Même cas
+  prévenu pour la publication de sherpa-onnx, absente sur macOS. Dit dans le code par un
+  `allow(dead_code)` limité aux plateformes concernées, plutôt qu'en retirant ce dont Windows et
+  Linux ont besoin.
 - **Sous Linux, installer un moteur depuis l'écran échouait à coup sûr.** L'archive téléchargée
   est enregistrée sous `<moteur>.partiel`, sans extension, et le format était deviné sur ce nom :
   le `tar.gz` publié pour Linux était ouvert comme un zip. Le format se décide désormais sur
