@@ -78,7 +78,10 @@ type Champ =
 /** `conteneur` est l'ID du `div` de l'onglet ou ce groupe doit s'afficher. ⚠️ Un groupe par
  * conteneur aujourd'hui, mais rien n'empeche plusieurs groupes de partager le meme onglet : c'est
  * le cas d'aucun aujourd'hui, mais la forme le permettrait sans y retoucher. */
-type Groupe = { titre: string; conteneur: string; champs: Champ[] };
+// `titreMasque` : le titre répète le nom de l'onglet qui le porte (« Capture » sous l'onglet
+// Capture). Il reste lu par les lecteurs d'écran, qui annoncent ainsi le groupe, mais ne s'affiche
+// plus (remarque de painteau le 2026-10-31).
+type Groupe = { titre: string; titreMasque?: true; conteneur: string; champs: Champ[] };
 
 // ⚠️ Cette liste EST l'inventaire des reglages : elle fait autorite, et le test
 // `reglages_utilises` echoue si un reglage y apparait sans rien piloter. Ce qui demande
@@ -88,6 +91,7 @@ type Groupe = { titre: string; conteneur: string; champs: Champ[] };
 const GROUPES: Groupe[] = [
   {
     titre: 'Capture',
+    titreMasque: true,
     conteneur: 'reglages-capture',
     champs: [
       {
@@ -192,7 +196,9 @@ const GROUPES: Groupe[] = [
   // ils ne pilotaient rien. Ils restent dans le fichier de réglages, donc aucune configuration
   // n'est cassée, et ils reviendront le jour où quelque chose les lit.
   {
-    titre: 'Transcription',
+    // Pas masqué : deux sections le précèdent dans l'onglet. Renommé plutôt, « Transcription »
+    // sous l'onglet Transcription ne disait rien.
+    titre: 'Réglages de la reconnaissance',
     conteneur: 'reglages-transcription',
     champs: [
       {
@@ -247,6 +253,7 @@ const GROUPES: Groupe[] = [
   },
   {
     titre: 'Sortie',
+    titreMasque: true,
     conteneur: 'reglages-sortie',
     champs: [
       {
@@ -337,6 +344,7 @@ const GROUPES: Groupe[] = [
   },
   {
     titre: 'Téléphone',
+    titreMasque: true,
     conteneur: 'reglages-telephone',
     champs: [
       {
@@ -644,7 +652,7 @@ function construire(): void {
     bloc.id = `groupe-${groupe.titre}`;
 
     const legende = document.createElement('legend');
-    legende.className = 'section';
+    legende.className = groupe.titreMasque ? 'section invisible-a-l-ecran' : 'section';
     legende.textContent = groupe.titre;
     bloc.append(legende);
 

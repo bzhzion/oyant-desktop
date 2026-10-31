@@ -235,11 +235,11 @@ body {
   position: relative;
   flex: 0 0 auto;
   display: flex;
-  /* ⚠️ `space-between` et un petit écart minimal : à 1,5 pas fixe, les six onglets dépassaient
-   * de 7 px à 560 px, la largeur PAR DÉFAUT de la fenêtre, donc la barre de défilement s'affichait
-   * à chaque ouverture (relevé le 2026-10-31). */
-  justify-content: space-between;
-  gap: var(--pas);
+  /* ⚠️ 1,25 pas : à 1,5, les six onglets dépassaient de 7 px à 560 px, la largeur PAR DÉFAUT de
+   * la fenêtre, donc la barre de défilement s'affichait à chaque ouverture (relevé le 2026-10-31).
+   * Pas de `space-between` pour gagner la place : en fenêtre agrandie, il étalait les onglets d'un
+   * bord à l'autre. */
+  gap: calc(var(--pas) * 1.25);
   padding: calc(var(--pas) * 2) calc(var(--pas) * 2.5) 0;
   border-bottom: 1px solid var(--bordure);
   overflow-x: auto;
@@ -518,6 +518,20 @@ body {
 
 .groupe > p {
   margin: 0;
+}
+
+/* Lu par les lecteurs d'écran, absent à l'écran : pour un titre qui répète le nom de l'onglet.
+ * Sélecteur plus précis que `.groupe > legend`, sinon le `float` de celui-ci l'emporterait. */
+.groupe > legend.invisible-a-l-ecran {
+  position: absolute;
+  float: none;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ⚠️ Aucune règle ne visait `textarea` : la liste du vocabulaire sortait en blanc natif au milieu

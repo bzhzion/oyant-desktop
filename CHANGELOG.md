@@ -165,6 +165,10 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
   se serrer à côté. Les blocs Vocabulaire, Substitutions et Dictées récentes reçoivent le même
   filet et perdent le trou d'une ligne entre leurs paragraphes ; la liste du vocabulaire, restée
   en blanc natif, prend le style sombre des autres champs.
+- **Les titres qui répétaient le nom de l'onglet ne s'affichent plus** (« Capture » sous l'onglet
+  Capture, de même pour Sortie et Téléphone) ; les lecteurs d'écran les annoncent toujours. Sous
+  l'onglet Transcription, où d'autres sections le précèdent, le groupe s'appelle désormais
+  « Réglages de la reconnaissance ».
 - **Cinq défauts d'affichage des réglages, relevés en passant chaque onglet à 560 px** : les
   boutons des cartes de modèle tombaient dans la colonne du bouton radio ; une liste au choix
   long écrasait son libellé à un mot par ligne (« Façon de dicter ») ; la ligne d'un téléphone
