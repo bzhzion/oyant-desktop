@@ -2836,6 +2836,7 @@ dependencies = [
  "tokio-tungstenite",
  "ureq",
  "windows 0.62.2",
+ "zbus",
  "zip",
 ]
 

@@ -17,6 +17,7 @@ mod chemins;
 mod dictee;
 mod historique;
 mod injection;
+mod medias;
 mod modeles;
 mod moteur;
 mod platform;

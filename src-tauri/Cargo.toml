@@ -82,10 +82,18 @@ base64 = "0.22"
 # autre implementation (voir `src/platform/mod.rs`), et lier cette caisse partout ferait echouer
 # la compilation des autres cibles pour une dependance qui ne les concerne pas.
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_WinRT", "Media_Control", "Foundation", "Foundation_Collections"] }
+
+# Pour les tests seulement : un lecteur Windows que le test lance lui-meme, afin d'eprouver la
+# pause de la musique sans jamais toucher a celle de la personne devant la machine.
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62.2", features = ["Media_Playback", "Media_Core", "Storage", "Storage_Streams", "Foundation"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 enigo = "0.6.1"
+# MPRIS sur le bus de session, pour mettre la musique en pause pendant la dictee (`medias.rs`).
+# Rust pur : pas de libdbus a installer sur la machine.
+zbus = "5"
 
 [profile.release]
 opt-level = 3

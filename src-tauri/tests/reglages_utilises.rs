@@ -22,10 +22,6 @@ use std::path::Path;
 /// La cle est le nom du champ Rust, la valeur dit **pourquoi** il attend.
 fn reports() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
-        (
-            "pause_medias",
-            "etape 7 bis : mettre en pause Spotify et VLC pendant la dictee",
-        ),
         // Etape 9 et au-dela.
         (
             "transcription_directe",

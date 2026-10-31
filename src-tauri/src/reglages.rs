@@ -203,7 +203,9 @@ impl Default for Reglages {
             bip_fin: true,
             frequence_bip_hz: 880,
             duree_bip_ms: 80,
-            pause_medias: false,
+            // Active par defaut : dicter par-dessus une chanson la fait entendre au microphone, et
+            // on ne relance que ce qu'on a coupe (`medias.rs`), donc rien ne demarre a tort.
+            pause_medias: true,
 
             // ⛔ **Le plus LEGER du catalogue, et c'est lie au moteur par defaut.** Une
             // installation neuve calcule sur le processeur : `medium` y met 22 s pour dix

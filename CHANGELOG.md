@@ -9,6 +9,26 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **La musique se met en pause pendant la dictée, et repart dès qu'on a fini de parler.**
+  Réglage « Mettre la musique en pause pendant la dictée », activé par défaut (il existait dans
+  les réglages sans rien piloter). Coupure juste avant le bip de début, reprise dès l'arrêt du
+  micro, sans attendre la transcription.
+
+  ⛔ **Pas la touche « lecture/pause » du clavier**, qui est une bascule : si rien ne joue, elle
+  LANCE la musique. Oyant interroge le système sur ce qui joue réellement, ne met en pause que
+  cela, et **ne relance que ce qu'il a lui-même coupé**. Windows : le contrôle des médias du
+  système (Spotify, navigateurs, lecteurs récents). Linux : MPRIS sur le bus de session
+  (`zbus`, Rust pur, rien à installer). La reprise passe par `Drop`, donc aucun chemin de fin de
+  dictée ne peut l'oublier.
+
+  ⚠️ **Les appels au système tournent dans un fil à part, limités à 800 ms** : un lecteur qui ne
+  répond pas ne retarde jamais l'ouverture du micro.
+
+  ✅ **Éprouvé sur un vrai lecteur Windows** : un test manuel (`pause_et_reprise_reelles`) fait
+  jouer un fichier silencieux par le lecteur intégré de Windows, vérifie que le système le voit
+  jouer, le met en pause, puis le relance, et ne touche à aucun autre lecteur. Prouvé rouge en
+  rendant la reprise inopérante.
+
 - **Un tableau compare les modèles avant de choisir** : taille, langues, temps de transcription
   d'une minute dictée, taux d'erreurs en moyenne et sur la voix la plus difficile. Mesuré le
   2026-10-31 sur un Intel Core i5-9400F sans carte graphique, trois lectures LibriVox en

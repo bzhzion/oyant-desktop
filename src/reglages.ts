@@ -146,6 +146,12 @@ const GROUPES: Groupe[] = [
         aide: 'Un son court confirme que l’écoute est terminée.',
       },
       {
+        cle: 'pause_media',
+        type: 'bool',
+        titre: 'Mettre la musique en pause pendant la dictée',
+        aide: 'Spotify, une vidéo dans le navigateur ou un autre lecteur se mettent en pause quand vous dictez, et repartent dès que vous avez fini. Seul ce qui jouait est relancé.',
+      },
+      {
         cle: 'beep_frequency_hz',
         avance: true,
         type: 'nombre',

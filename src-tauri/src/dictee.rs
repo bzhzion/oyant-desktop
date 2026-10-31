@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 use crate::barre::{self, Etat};
-use crate::{audio, chemins, historique, injection, modeles, moteur, reglages, texte};
+use crate::{audio, chemins, historique, injection, medias, modeles, moteur, reglages, texte};
 
 /// Ce qu'il manque pour pouvoir transcrire.
 ///
@@ -181,6 +181,8 @@ pub struct Session {
     /// changement de fenetre fait expres pendant qu'on parle. Le menu, lui, prend le focus par
     /// construction : sans cette memoire, le texte irait dans la fenetre d’Oyant.
     cible: Option<isize>,
+    /// La musique mise en pause pour cette dictee, relancee quand la valeur est abandonnee.
+    musique: medias::Reprise,
 }
 
 /// L'enregistrement en cours, s'il y en a un.
@@ -240,6 +242,14 @@ fn commencer_avec(app: &AppHandle, cible: Option<isize>) {
         return;
     }
 
+    // La musique se coupe AVANT le bip, pour que le bip s'entende et que le microphone ne
+    // capte pas la chanson. Reglage desactive : une reprise vide, qui ne relance rien.
+    let musique = if reglages.pause_medias {
+        medias::suspendre()
+    } else {
+        medias::Reprise::default()
+    };
+
     // ⛔ Le bip AVANT d'ouvrir le microphone, jamais pendant. Joue en parallele, Oyant
     // s'enregistrerait lui-meme, et un bip capte depasse le seuil de silence : un appui
     // accidentel declencherait alors une transcription au lieu d'etre reconnu comme
@@ -256,6 +266,7 @@ fn commencer_avec(app: &AppHandle, cible: Option<isize>) {
             *place = Some(Session {
                 enregistrement,
                 cible,
+                musique,
             });
             let _ = barre::definir_etat(app, Etat::Enregistrement);
             let _ = barre::rafraichir_entree_dictee(app, true);
@@ -280,6 +291,9 @@ pub fn terminer(app: &AppHandle) {
     let duree_ms = session.enregistrement.duree_ms();
     let cible = session.cible;
     let echantillons = session.enregistrement.arreter();
+    // ⚠️ La musique repart DES que le microphone est coupe, sans attendre la transcription,
+    // qui peut prendre plusieurs secondes : c'est le moment ou l'utilisateur a fini de parler.
+    drop(session.musique);
 
     // ⚠️ Apres l'arret du microphone, donc aucun risque de s'enregistrer. Il marque la fin de
     // l'ecoute et se joue meme quand l'appui etait trop bref : le bip de debut ayant deja sonne,
