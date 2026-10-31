@@ -520,6 +520,20 @@ body {
   margin: 0;
 }
 
+/* Le test du raccourci occupe toute la largeur de sa ligne, sous le libellé et le champ. */
+.test-raccourci {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pas);
+}
+
+.test-raccourci p {
+  flex: 1 1 20ch;
+  margin: 0;
+}
+
 .appairage-qr {
   display: grid;
   gap: calc(var(--pas) * 1.5);

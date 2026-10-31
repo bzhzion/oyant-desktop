@@ -47,6 +47,31 @@ pub fn action(bascule: bool, appui: bool, deja_enfoncee: bool, en_cours: bool) -
 /// La touche est-elle tenue en ce moment, d'apres les evenements recus.
 static ENFONCEE: AtomicBool = AtomicBool::new(false);
 
+/// Un test du raccourci est-il en cours, depuis l'ecran de reglages.
+static EN_TEST: AtomicBool = AtomicBool::new(false);
+
+/// Prend l'evenement pour le test s'il y en a un en cours : rend vrai, et le test est consomme.
+///
+/// ⛔ **Le raccourci « muet » ne se detecte pas en arriere-plan.** Quand un autre logiciel (jeu,
+/// anti-triche, outil de capture ou de securite) pose un crochet clavier global et garde la
+/// combinaison pour lui, notre enregistrement a REUSSI et l'evenement n'arrive simplement jamais :
+/// rien ne distingue ce cas d'un utilisateur qui n'appuie pas. Seul un test explicite tranche,
+/// « appuyez maintenant », d'ou ce mode. Pendant le test, l'appui ne lance PAS de dictee.
+///
+/// Seul l'APPUI consomme le test : le relachement qui suit est ignore, sinon il serait pris pour
+/// la fin d'une dictee jamais commencee.
+pub fn prendre_pour_test(appui: bool, drapeau: &AtomicBool) -> bool {
+    appui
+        && drapeau
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+}
+
+/// Ouvre ou referme la fenetre de test du raccourci.
+pub fn tester(actif: bool) {
+    EN_TEST.store(actif, Ordering::SeqCst);
+}
+
 /// Traduit le libelle des reglages vers ce que le greffon attend.
 ///
 /// ⚠️ **Les deux vocabulaires ne coincident pas** : les reglages ecrivent `Ctrl+Alt+Space`,
@@ -208,6 +233,11 @@ pub fn enregistrer(app: &AppHandle, libelle: &str) -> Result<(), String> {
         .on_shortcut(raccourci, move |app, _raccourci, evenement| {
             let appui = evenement.state() == ShortcutState::Pressed;
             let deja_enfoncee = ENFONCEE.swap(appui, Ordering::SeqCst) && appui;
+            if prendre_pour_test(appui, &EN_TEST) {
+                eprintln!("raccourci : reçu pendant le test");
+                let _ = tauri::Emitter::emit(app, "raccourci-teste", ());
+                return;
+            }
             // Relu a chaque evenement : changer de mode dans les reglages vaut tout de suite,
             // sans reenregistrer le raccourci.
             let bascule = crate::reglages::lire_sans_application().mode_raccourci == "bascule";
@@ -293,6 +323,29 @@ mod tests {
     #[test]
     fn une_touche_inconnue_n_est_pas_devinee() {
         assert_eq!(normaliser("Ctrl+Inconnue"), "CommandOrControl+Inconnue");
+    }
+
+    #[test]
+    fn le_test_prend_un_seul_appui_et_jamais_un_relachement() {
+        let drapeau = AtomicBool::new(true);
+        assert!(
+            !prendre_pour_test(false, &drapeau),
+            "un relâchement ne consomme pas le test"
+        );
+        assert!(
+            prendre_pour_test(true, &drapeau),
+            "le premier appui est pris pour le test"
+        );
+        assert!(
+            !prendre_pour_test(true, &drapeau),
+            "le test est consommé : l'appui suivant redevient une dictée"
+        );
+    }
+
+    #[test]
+    fn hors_test_aucun_appui_n_est_detourne() {
+        let drapeau = AtomicBool::new(false);
+        assert!(!prendre_pour_test(true, &drapeau));
     }
 
     #[test]

@@ -10,6 +10,7 @@
 // libelles, eux, sont en francais : c'est l'interface.
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 import { brancherHistorique, brancherSubstitutions, brancherVocabulaire } from './texte';
 
@@ -631,6 +632,7 @@ function champVersDom(champ: Champ): HTMLElement {
 
     bloc.append(controle, suffixe);
     ligne.append(etiquette, bloc);
+    if (champ.cle === 'hotkey') ligne.append(construireTestRaccourci(controle as HTMLInputElement));
   }
 
   return ligne;
@@ -709,6 +711,53 @@ function brancherCaptureRaccourci(champ: HTMLInputElement): void {
       }
     })();
   });
+}
+
+/**
+ * « Tester » : vérifie que le raccourci arrive VRAIMENT jusqu'à Oyant.
+ *
+ * ⛔ Un raccourci peut être enregistré avec succès et n'arriver jamais : un jeu, un anti-triche ou
+ * un outil de capture qui pose son propre crochet clavier le garde pour lui. Rien ne distingue ce
+ * cas d'un utilisateur qui n'appuie pas, donc rien ne le signale en arrière-plan. Ce test le
+ * tranche : pendant huit secondes, le prochain appui est signalé ici au lieu de lancer une dictée.
+ */
+function construireTestRaccourci(champ: HTMLInputElement): HTMLElement {
+  const zone = document.createElement('div');
+  zone.className = 'test-raccourci';
+
+  const bouton = document.createElement('button');
+  bouton.type = 'button';
+  bouton.className = 'action';
+  bouton.textContent = 'Tester le raccourci';
+
+  const etat = document.createElement('p');
+  etat.className = 'reglage-aide';
+  etat.setAttribute('role', 'status');
+
+  bouton.addEventListener('click', () => {
+    void (async () => {
+      bouton.disabled = true;
+      etat.textContent = `Appuyez maintenant sur ${champ.value}…`;
+      let recu = false;
+      const fin = await listen('raccourci-teste', () => {
+        recu = true;
+      });
+      await invoke('tester_raccourci', { actif: true });
+      const debut = Date.now();
+      while (!recu && Date.now() - debut < 8000) {
+        await new Promise((r) => window.setTimeout(r, 100));
+      }
+      await invoke('tester_raccourci', { actif: false });
+      fin();
+      etat.textContent = recu
+        ? 'Le raccourci arrive bien jusqu’à Oyant.'
+        : `Rien n’est arrivé. Si vous avez bien appuyé, un autre logiciel garde ${champ.value} pour lui (jeu, anti-triche, outil de capture d’écran ou de sécurité) : choisissez une autre combinaison.`;
+      bouton.disabled = false;
+    })();
+  });
+
+  zone.append(bouton, etat);
+  return zone;
 }
 
 function construire(): void {

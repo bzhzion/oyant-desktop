@@ -9,6 +9,13 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **« Tester le raccourci »**, sous le champ du raccourci : pendant huit secondes, le prochain
+  appui est signalé à l'écran au lieu de lancer une dictée. Si rien n'arrive, l'écran dit qu'un
+  autre logiciel (jeu, anti-triche, outil de capture ou de sécurité) garde la combinaison pour lui.
+  ⛔ Ce cas ne se détecte pas en arrière-plan : l'enregistrement auprès du système RÉUSSIT, et
+  l'évènement n'arrive simplement jamais, ce qui ressemble trait pour trait à quelqu'un qui
+  n'appuie pas. Seul l'appui consomme le test, jamais le relâchement (`prendre_pour_test`, testé).
+
 - **Le raccourci global se choisit en appuyant dessus** : on clique dans le champ et on presse la
   combinaison, Échap annule, Tab garde son rôle. Le cœur compose le libellé
   (`raccourci::composer`, 5 tests dont un prouvé rouge) et refuse une touche ordinaire seule, ou

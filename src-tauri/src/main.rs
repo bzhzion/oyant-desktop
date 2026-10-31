@@ -179,6 +179,13 @@ fn composer_raccourci(
     raccourci::composer(&code, ctrl, alt, maj, systeme)
 }
 
+/// Ouvre (ou referme) le test du raccourci : le prochain appui est signale a l'ecran par
+/// l'evenement `raccourci-teste`, sans lancer de dictee. Voir `raccourci::prendre_pour_test`.
+#[tauri::command]
+fn tester_raccourci(actif: bool) {
+    raccourci::tester(actif)
+}
+
 /// Retire le raccourci le temps d'en saisir un autre. Voir `raccourci::suspendre`.
 #[tauri::command]
 fn suspendre_raccourci(app: tauri::AppHandle) {
@@ -376,6 +383,7 @@ fn interface(fenetre_visible: bool) {
             appliquer_raccourci,
             composer_raccourci,
             suspendre_raccourci,
+            tester_raccourci,
             historique::etat_historique,
             historique::effacer_historique
         ])
