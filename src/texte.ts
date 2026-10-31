@@ -36,7 +36,7 @@ export function brancherSubstitutions(
     hote.replaceChildren();
 
     const groupe = document.createElement('fieldset');
-    groupe.className = 'groupe';
+    groupe.className = 'groupe groupe-texte';
     const titre = document.createElement('legend');
     titre.textContent = 'Substitutions';
     groupe.append(titre);
@@ -155,7 +155,7 @@ export async function brancherHistorique(): Promise<void> {
     if (entrees.length === 0) return;
 
     const groupe = document.createElement('fieldset');
-    groupe.className = 'groupe';
+    groupe.className = 'groupe groupe-texte';
     const titre = document.createElement('legend');
     titre.textContent = `Dictées récentes (${entrees.length})`;
     groupe.append(titre);
@@ -248,7 +248,7 @@ export function brancherVocabulaire(
   hote.replaceChildren();
 
   const groupe = document.createElement('fieldset');
-  groupe.className = 'groupe';
+  groupe.className = 'groupe groupe-texte';
   const titre = document.createElement('legend');
   titre.textContent = 'Vocabulaire';
   groupe.append(titre);

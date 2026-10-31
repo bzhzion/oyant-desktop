@@ -525,7 +525,14 @@ function programmerEnregistrement(): void {
 
 function champVersDom(champ: Champ): HTMLElement {
   const ligne = document.createElement('div');
-  ligne.className = champ.type === 'bool' ? 'reglage' : 'reglage reglage-valeur';
+  // Une liste passe SOUS son texte : ses choix sont des phrases, qui ne tiennent pas à côté
+  // d'une aide sans écraser l'une ou l'autre (demandé par painteau le 2026-10-31).
+  ligne.className =
+    champ.type === 'bool'
+      ? 'reglage'
+      : champ.type === 'choix'
+        ? 'reglage reglage-valeur reglage-choix'
+        : 'reglage reglage-valeur';
   ligne.id = `ligne-${champ.cle}`;
 
   const id = `r-${champ.cle}`;

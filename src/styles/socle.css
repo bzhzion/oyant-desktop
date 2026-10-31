@@ -495,7 +495,54 @@ body {
   padding: 0;
   border: 0;
   display: grid;
-  gap: calc(var(--pas) * 2);
+  gap: calc(var(--pas) * 1.5);
+}
+
+/* Un filet discret AU-DESSUS de chaque réglage, y compris le premier, qui le sépare du titre de
+ * section (demandé par painteau le 2026-10-31).
+ * ⚠️ Pas de `.reglage + .reglage` : les réglages avancés repliés restent dans le DOM (`hidden`),
+ * donc un sélecteur de voisin poserait le filet selon des lignes invisibles, et le premier
+ * réglage visible en perdrait ou en gagnerait un selon ce qui est replié au-dessus. */
+.groupe > .reglage {
+  padding-top: calc(var(--pas) * 1.5);
+  border-top: 1px solid var(--bordure);
+}
+
+/* Vocabulaire, substitutions, dictées récentes : des blocs entiers et non des lignes, séparés du
+ * réglage qui les précède par le même filet. Leurs paragraphes perdent la marge du navigateur,
+ * qui s'ajoutait à l'écart de la grille et laissait un trou d'une ligne entre deux phrases. */
+.groupe-texte {
+  padding-top: calc(var(--pas) * 1.5);
+  border-top: 1px solid var(--bordure);
+}
+
+.groupe > p {
+  margin: 0;
+}
+
+/* ⚠️ Aucune règle ne visait `textarea` : la liste du vocabulaire sortait en blanc natif au milieu
+ * d'une fenêtre sombre. Mêmes bord, fond et police que les autres champs. */
+.groupe textarea {
+  width: 100%;
+  padding: calc(var(--pas) * 0.75);
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--texte);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* `--texte-doux` (6,4:1) plutôt que le gris par défaut du navigateur, sous 4,5:1 sur ce fond. */
+.groupe textarea::placeholder {
+  color: var(--texte-doux);
+}
+
+.groupe textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .groupe > legend {
@@ -532,6 +579,21 @@ body {
   min-width: 0;
   align-items: center;
   gap: calc(var(--pas) * 0.75);
+}
+
+/* Une liste prend toute la largeur SOUS son texte. La colonne d'unité vide est gardée, pour que
+ * son bord droit tombe sur celui des champs numériques. */
+.reglage-choix {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.reglage-choix .reglage-controle {
+  grid-template-columns: 1fr 3ch;
+}
+
+.reglage-choix select {
+  width: 100%;
 }
 
 .reglage-unite {

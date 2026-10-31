@@ -160,6 +160,11 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **Réglages plus lisibles** : un filet discret sépare chaque réglage, et les listes déroulantes
+  (langue, façon de dicter, microphone) passent sous leur texte sur toute la largeur au lieu de
+  se serrer à côté. Les blocs Vocabulaire, Substitutions et Dictées récentes reçoivent le même
+  filet et perdent le trou d'une ligne entre leurs paragraphes ; la liste du vocabulaire, restée
+  en blanc natif, prend le style sombre des autres champs.
 - **Cinq défauts d'affichage des réglages, relevés en passant chaque onglet à 560 px** : les
   boutons des cartes de modèle tombaient dans la colonne du bouton radio ; une liste au choix
   long écrasait son libellé à un mot par ligne (« Façon de dicter ») ; la ligne d'un téléphone
