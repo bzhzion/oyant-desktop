@@ -4,6 +4,10 @@
 //! interchangeable. Chaque etape suppose ce que les precedentes ont fait, et les inverser produit
 //! des defauts qui ne se voient qu'a l'usage :
 //!
+//! 0. **Hesitations retirees, puis vocabulaire corrige** (`supprimer_hesitations`,
+//!    `corriger_vocabulaire`), avant tout le reste : une substitution ou une majuscule ne doivent
+//!    jamais porter sur un « euh », et la correction du vocabulaire compare le texte du moteur, pas
+//!    un texte deja retouche.
 //! 1. **Substitutions**, sur le texte tel que le moteur l'a rendu. Elles doivent passer AVANT la
 //!    typographie : celle-ci remplace des espaces ordinaires par des espaces insecables, et une
 //!    substitution qui cherche « n'est-ce pas ? » ne trouverait plus rien.
@@ -201,6 +205,219 @@ fn espace_insecable_attendue_avant(caracteres: &[char], indice: usize) -> bool {
     }
 }
 
+/// Les hesitations retirees du texte dicte.
+///
+/// ⛔ **Liste courte et FERMEE, jamais un motif.** Seuls des sons qui ne sont jamais des mots :
+/// « ben », « bah » ou « bon » sont aussi de vrais mots (« Ben », « un bon dossier ») et n'y sont
+/// donc pas. Retirer un mot que l'utilisateur a voulu dire est pire que laisser un « euh ».
+const HESITATIONS: &[&str] = &[
+    "euh", "euuh", "euhh", "heu", "heuu", "hum", "humm", "hmm", "hmmm", "mmh", "mmm", "hem", "uh",
+    "uhm", "um", "umm", "erm", "ehm",
+];
+
+/// Retire les hesitations, avec la virgule qui les accompagne.
+///
+/// ⚠️ **La majuscule de debut de phrase est reportee** : « Bon. Euh, je pense » doit rendre
+/// « Bon. Je pense », et pas « Bon. je pense ». Et une ponctuation FORTE portee par l'hesitation
+/// (« alors euh. ») revient au mot precedent, pour ne pas perdre la fin de phrase.
+pub fn supprimer_hesitations(texte: &str) -> String {
+    let mut gardes: Vec<String> = Vec::new();
+    let mut majuscule_a_reporter = false;
+    for jeton in texte.split_whitespace() {
+        let lettres: String = jeton
+            .chars()
+            .filter(|c| c.is_alphabetic())
+            .collect::<String>()
+            .to_lowercase();
+        if HESITATIONS.contains(&lettres.as_str()) {
+            let debut_de_phrase = gardes
+                .last()
+                .is_none_or(|precedent| precedent.ends_with(['.', '!', '?', '…']));
+            if debut_de_phrase && jeton.starts_with(|c: char| c.is_uppercase()) {
+                majuscule_a_reporter = true;
+            }
+            // Une hesitation ENCADREE de virgules (« pense, euh, que ») emporte les deux : sinon on
+            // obtiendrait « Je pense, que ». Non encadree (« Oui, euh je »), la virgule d'avant
+            // appartient a la phrase et reste.
+            if jeton.ends_with(',')
+                && let Some(precedent) = gardes.last_mut()
+                && precedent.ends_with(',')
+            {
+                precedent.pop();
+            }
+            // La ponctuation forte revient au mot precedent ; la virgule disparait avec le son.
+            if let Some(forte) = jeton
+                .chars()
+                .rev()
+                .find(|c| matches!(c, '.' | '!' | '?' | '…'))
+                && let Some(precedent) = gardes.last_mut()
+                && !precedent.ends_with(['.', '!', '?', '…'])
+            {
+                precedent.push(forte);
+            }
+            continue;
+        }
+        let mut mot = jeton.to_string();
+        if majuscule_a_reporter {
+            mot = majuscule_initiale(&mot);
+            majuscule_a_reporter = false;
+        }
+        gardes.push(mot);
+    }
+    gardes.join(" ")
+}
+
+/// Le texte sans accents, en minuscules : la base des comparaisons approchees.
+fn sans_accents(texte: &str) -> String {
+    texte
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'à' | 'â' | 'ä' | 'á' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' | 'í' => 'i',
+            'ô' | 'ö' | 'ó' => 'o',
+            'ù' | 'û' | 'ü' | 'ú' => 'u',
+            'ç' => 'c',
+            'ÿ' => 'y',
+            autre => autre,
+        })
+        .collect()
+}
+
+/// Une cle de prononciation francaise, volontairement grossiere : deux graphies qui se disent
+/// pareil doivent donner la meme cle (« Kowalsky » et « Kowalski », « Dupond » et « Dupont »).
+///
+/// Fonction PURE. Elle n'a pas a etre juste en phonetique, seulement a ne JAMAIS rapprocher deux
+/// mots qui se prononcent differemment : c'est la distance d'ecriture, verifiee en plus, qui
+/// empeche les rapprochements abusifs.
+pub fn cle_phonetique(mot: &str) -> String {
+    let mut s: String = sans_accents(mot)
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    for (avant, apres) in [
+        ("ph", "f"),
+        ("qu", "k"),
+        ("ch", "s"),
+        ("sh", "s"),
+        ("eau", "o"),
+        ("au", "o"),
+        ("ai", "e"),
+        ("ei", "e"),
+        ("gu", "g"),
+    ] {
+        s = s.replace(avant, apres);
+    }
+    let lettres: Vec<char> = s.chars().collect();
+    let mut cle = String::new();
+    for (i, &c) in lettres.iter().enumerate() {
+        let suivante = lettres.get(i + 1).copied();
+        let son = match c {
+            'c' if matches!(suivante, Some('e' | 'i' | 'y')) => 's',
+            'c' | 'q' => 'k',
+            'g' if matches!(suivante, Some('e' | 'i' | 'y')) => 'j',
+            'w' => 'v',
+            'y' => 'i',
+            'z' => 's',
+            'x' => 's',
+            'h' => continue,
+            autre => autre,
+        };
+        if cle.ends_with(son) {
+            continue;
+        }
+        cle.push(son);
+    }
+    // Les consonnes finales muettes du francais.
+    while cle.len() > 3 && cle.ends_with(['e', 's', 't', 'd', 'x']) {
+        cle.pop();
+    }
+    cle
+}
+
+fn distance(a: &[char], b: &[char]) -> usize {
+    let mut precedente: Vec<usize> = (0..=b.len()).collect();
+    for (i, x) in a.iter().enumerate() {
+        let mut courante = vec![i + 1];
+        for (j, y) in b.iter().enumerate() {
+            courante.push(
+                (precedente[j + 1] + 1)
+                    .min(courante[j] + 1)
+                    .min(precedente[j] + usize::from(x != y)),
+            );
+        }
+        precedente = courante;
+    }
+    precedente[b.len()]
+}
+
+/// Ce mot du texte est-il une graphie approchee de ce terme du vocabulaire ?
+///
+/// ⛔ **Deux conditions, et les deux sont necessaires.** Meme prononciation (meme cle) ET presque
+/// la meme ecriture (au plus une lettre d'ecart pour quatre). La cle seule rapprocherait « lors »
+/// de « Laure », qui se disent pareil et n'ont rien a voir ; l'ecriture seule rapprocherait
+/// « chat » de « chas ». Et le terme doit faire au moins quatre lettres : en dessous, presque tout
+/// ressemble a presque tout.
+fn approche(mot: &str, terme: &str) -> bool {
+    let (m, t) = (sans_accents(mot), sans_accents(terme));
+    let t_lettres: Vec<char> = t.chars().filter(|c| c.is_alphanumeric()).collect();
+    if t_lettres.len() < 4 {
+        return false;
+    }
+    if m == t {
+        // Meme mot a la casse ou aux accents pres : on rend la graphie du vocabulaire.
+        return true;
+    }
+    let m_lettres: Vec<char> = m.chars().filter(|c| c.is_alphanumeric()).collect();
+    let ecart_admis = (t_lettres.len() / 4).max(1);
+    cle_phonetique(&m) == cle_phonetique(&t) && distance(&m_lettres, &t_lettres) <= ecart_admis
+}
+
+/// Remplace les graphies approchees des termes du vocabulaire par le terme lui-meme.
+///
+/// Un terme de plusieurs mots (« Saint-Jean de Luz », « Maître Kowalski ») se compare a autant de
+/// mots consecutifs du texte. La ponctuation collee au mot est conservee.
+pub fn corriger_vocabulaire(texte: &str, vocabulaire: &[String]) -> String {
+    let mut mots: Vec<String> = texte.split_whitespace().map(String::from).collect();
+    for terme in vocabulaire {
+        let parts: Vec<&str> = terme.split_whitespace().collect();
+        if parts.is_empty() || parts.len() > mots.len() {
+            continue;
+        }
+        let mut i = 0;
+        while i + parts.len() <= mots.len() {
+            let fenetre = &mots[i..i + parts.len()];
+            // La ponctuation du DERNIER mot de la fenetre est celle qu'on garde.
+            let fin = fenetre
+                .last()
+                .map(|m| ponctuation_finale(m))
+                .unwrap_or_default();
+            let sans_ponctuation: Vec<String> = fenetre
+                .iter()
+                .map(|m| {
+                    m.trim_end_matches(|c: char| !c.is_alphanumeric())
+                        .to_string()
+                })
+                .collect();
+            let candidat = sans_ponctuation.join(" ");
+            if candidat != *terme && approche(&candidat, terme) {
+                let remplacement = format!("{terme}{fin}");
+                mots.splice(i..i + parts.len(), std::iter::once(remplacement));
+                i += 1;
+                continue;
+            }
+            i += 1;
+        }
+    }
+    mots.join(" ")
+}
+
+fn ponctuation_finale(mot: &str) -> String {
+    let coupe = mot.trim_end_matches(|c: char| !c.is_alphanumeric()).len();
+    mot[coupe..].to_string()
+}
+
 /// Toutes les transformations de contenu, dans l'ordre qui compte.
 ///
 /// Les deux encadrements (espace avant, entree finale) sont volontairement **hors** de cette
@@ -240,6 +457,100 @@ pub fn encadrer(texte: &str, espace_avant: bool, entree_finale: bool) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Hesitations ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn les_hesitations_disparaissent_avec_leur_virgule() {
+        assert_eq!(
+            supprimer_hesitations("Je pense, euh, que le dossier est prêt."),
+            "Je pense que le dossier est prêt."
+        );
+        assert_eq!(supprimer_hesitations("Euh, je reprends."), "Je reprends.");
+        assert_eq!(supprimer_hesitations("hmm hum bonjour"), "bonjour");
+        assert_eq!(
+            supprimer_hesitations("Oui, euh je viens."),
+            "Oui, je viens."
+        );
+    }
+
+    /// ⚠️ La majuscule de debut de phrase suit le premier vrai mot.
+    #[test]
+    fn la_majuscule_de_debut_de_phrase_est_reportee() {
+        assert_eq!(
+            supprimer_hesitations("C'est noté. Euh, on continue."),
+            "C'est noté. On continue."
+        );
+    }
+
+    /// Le point porte par l'hesitation revient au mot precedent : sinon la phrase perdrait sa fin.
+    #[test]
+    fn la_ponctuation_forte_de_l_hesitation_est_gardee() {
+        assert_eq!(supprimer_hesitations("On verra euh."), "On verra.");
+    }
+
+    /// ⛔ Le cas qui justifie une liste fermee : ces mots sont des sons ET des mots.
+    #[test]
+    fn les_vrais_mots_proches_d_une_hesitation_restent() {
+        let phrase = "Ben a dit bah oui, un bon dossier, humble et humain.";
+        assert_eq!(supprimer_hesitations(phrase), phrase);
+    }
+
+    // ── Vocabulaire approche ────────────────────────────────────────────────────────────────
+
+    fn vocabulaire(termes: &[&str]) -> Vec<String> {
+        termes.iter().map(|t| t.to_string()).collect()
+    }
+
+    #[test]
+    fn une_graphie_approchee_devient_le_terme_du_vocabulaire() {
+        let v = vocabulaire(&["Kowalski", "Dupont"]);
+        assert_eq!(
+            corriger_vocabulaire("Maître Kowalsky et Me Dupond, présents.", &v),
+            "Maître Kowalski et Me Dupont, présents."
+        );
+    }
+
+    /// ⛔ **Le cas qui justifie la double condition** : meme prononciation, ecriture eloignee. La
+    /// cle phonetique seule aurait remplace un mot courant par un prenom.
+    #[test]
+    fn un_mot_courant_qui_sonne_pareil_n_est_pas_remplace() {
+        let v = vocabulaire(&["Laure"]);
+        let phrase = "Il est parti lors de la réunion.";
+        assert_eq!(corriger_vocabulaire(phrase, &v), phrase);
+    }
+
+    #[test]
+    fn un_terme_court_n_est_jamais_approche() {
+        let v = vocabulaire(&["ECG"]);
+        let phrase = "Un ECJ normal.";
+        assert_eq!(corriger_vocabulaire(phrase, &v), phrase);
+    }
+
+    #[test]
+    fn la_casse_du_vocabulaire_est_rendue() {
+        let v = vocabulaire(&["Villeurbanne"]);
+        assert_eq!(
+            corriger_vocabulaire("à villeurbanne.", &v),
+            "à Villeurbanne."
+        );
+    }
+
+    #[test]
+    fn un_terme_de_plusieurs_mots_se_compare_a_autant_de_mots() {
+        let v = vocabulaire(&["Saint-Jean Delmas"]);
+        assert_eq!(
+            corriger_vocabulaire("chez Saint-Jean Delmasse aujourd'hui", &v),
+            "chez Saint-Jean Delmas aujourd'hui"
+        );
+    }
+
+    #[test]
+    fn un_mot_sans_rapport_ne_bouge_pas() {
+        let v = vocabulaire(&["Kowalski"]);
+        let phrase = "Le patient va bien.";
+        assert_eq!(corriger_vocabulaire(phrase, &v), phrase);
+    }
 
     fn regle(cherche: &str, remplace: &str, sensible: bool) -> Substitution {
         Substitution {

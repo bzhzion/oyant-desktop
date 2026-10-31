@@ -49,6 +49,8 @@ export type Reglages = {
   copy_to_clipboard: boolean;
   substitutions: Substitution[];
   vocabulary: string[];
+  fuzzy_vocabulary: boolean;
+  remove_fillers: boolean;
 
   notifications: boolean;
   history_size: number;
@@ -285,6 +287,18 @@ const GROUPES: Groupe[] = [
         type: 'bool',
         titre: 'Typographie française',
         aide: 'Ajoute les espaces insécables que le français demande avant ? ! : et ;',
+      },
+      {
+        cle: 'remove_fillers',
+        type: 'bool',
+        titre: 'Retirer les hésitations',
+        aide: 'Enlève « euh », « hum » et leurs semblables. Les vrais mots comme « ben » ou « bon » restent.',
+      },
+      {
+        cle: 'fuzzy_vocabulary',
+        type: 'bool',
+        titre: 'Corriger les mots proches de mon vocabulaire',
+        aide: 'Un mot qui se prononce et s’écrit presque comme un terme de votre vocabulaire est remplacé par ce terme (« Kowalsky » devient « Kowalski »). Un mot courant qui sonne seulement pareil n’est jamais touché.',
       },
       {
         cle: 'copy_to_clipboard',

@@ -9,6 +9,24 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Les hésitations sont retirées** (« euh », « hum », « hmm »…), réglage « Retirer les
+  hésitations », activé par défaut. ⛔ **Liste courte et fermée de sons qui ne sont jamais des
+  mots** : « ben », « bah » ou « bon » restent, ce sont aussi de vrais mots. Une hésitation
+  encadrée de virgules emporte les deux (« Je pense, euh, que » rend « Je pense que »), la
+  majuscule de début de phrase passe au mot suivant, et un point porté par l'hésitation revient
+  au mot d'avant.
+- **Correction approchée du vocabulaire** : un mot qui se prononce ET s'écrit presque comme un
+  terme du vocabulaire est remplacé par ce terme (« Kowalsky » devient « Kowalski », « Dupond »
+  devient « Dupont »). Réglage « Corriger les mots proches de mon vocabulaire », activé par
+  défaut, sans effet tant que le vocabulaire est vide. ⛔ **Les deux conditions sont
+  nécessaires** : même clé de prononciation française ET au plus une lettre d'écart pour quatre,
+  et seulement pour les termes de quatre lettres ou plus. La prononciation seule aurait remplacé
+  « lors » par « Laure ». Cette correction avait été remise à plus tard parce qu'une correction
+  fausse coûte plus qu'une correction manquée ; elle arrive sur demande de painteau, encadrée.
+  Les deux garde-fous sont prouvés rouges par mutation. Le texte final et la bulle passent par
+  la même fonction (`dictee::mettre_en_forme`) et ne peuvent pas diverger ; l'historique garde
+  toujours le texte brut.
+
 - **Nouveau moteur : SenseVoice, très rapide pour le coréen, le chinois et le japonais.** C'est
   la langue que Parakeet ne connaît pas. Mesuré le 2026-10-31 sur un extrait coréen de 4,6 s :
   bon texte en 1,8 s chargement compris (0,11 s de calcul), contre 4,3 s pour Whisper Small ; et

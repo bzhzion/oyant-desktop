@@ -152,11 +152,19 @@ pub struct Reglages {
     /// un biais souple, donc rien ne peut etre remplace a tort. Les projets qui font ça le mieux
     /// separent nettement les deux, et c'est ce qu'on reprend.
     ///
-    /// ⚠️ Il n'y a pas de correction approximative apres coup pour l'instant, et c'est
-    /// deliberement remis a plus tard : on mesure d'abord ce que ce biais suffit a corriger. Sur
-    /// un public tenu au secret, une correction fausse coute plus qu'une correction manquee.
+    /// ⚠️ **La correction approchee apres coup existe depuis le 2026-10-31** (demande de painteau),
+    /// elle avait d'abord ete remise a plus tard parce que, sur un public tenu au secret, une
+    /// correction fausse coute plus qu'une correction manquee. D'ou ses deux conditions cumulees
+    /// (meme prononciation ET ecriture presque identique, `texte::corriger_vocabulaire`) et son
+    /// propre reglage, `corriger_vocabulaire`, pour la couper.
     #[serde(rename = "vocabulary", default)]
     pub vocabulaire: Vec<String>,
+    /// Remplacer par le terme du vocabulaire un mot qui s'en ecrit et s'en prononce presque pareil.
+    #[serde(rename = "fuzzy_vocabulary")]
+    pub corriger_vocabulaire: bool,
+    /// Retirer « euh », « hum » et les autres hesitations. Voir `texte::supprimer_hesitations`.
+    #[serde(rename = "remove_fillers")]
+    pub supprimer_hesitations: bool,
 
     // Interface
     #[serde(rename = "notifications")]
@@ -242,6 +250,10 @@ impl Default for Reglages {
             copier_presse_papiers: false,
             substitutions: Vec::new(),
             vocabulaire: Vec::new(),
+            // Actives par defaut : sans vocabulaire, la correction ne fait rien ; et les
+            // hesitations retirees forment une liste fermee de sons qui ne sont jamais des mots.
+            corriger_vocabulaire: true,
+            supprimer_hesitations: true,
 
             notifications: true,
             // ⛔ **Zero, donc desactive.** L'historique contient ce que quelqu'un a dit a voix

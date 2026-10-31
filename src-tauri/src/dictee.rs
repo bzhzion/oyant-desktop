@@ -271,6 +271,26 @@ impl Apercu {
     }
 }
 
+/// Toute la mise en forme d'un texte brut, selon les reglages, dans l'ordre de `texte.rs`.
+///
+/// ⛔ **Une seule fonction pour le texte final ET la bulle** : deux copies de cette chaine
+/// finiraient par diverger, et la bulle montrerait alors autre chose que ce qui va s'ecrire.
+fn mettre_en_forme(brut: &str, reglages: &reglages::Reglages) -> String {
+    let mut texte = brut.to_string();
+    if reglages.supprimer_hesitations {
+        texte = texte::supprimer_hesitations(&texte);
+    }
+    if reglages.corriger_vocabulaire {
+        texte = texte::corriger_vocabulaire(&texte, &reglages.vocabulaire);
+    }
+    texte::transformer(
+        &texte,
+        &reglages.substitutions,
+        reglages.majuscule_automatique,
+        reglages.typographie_francaise,
+    )
+}
+
 /// Le texte du rappel affiche quand le micro reste ouvert sans qu'on tienne une touche.
 ///
 /// Fonction PURE : il nomme le geste qui arrete, et ce geste depend de ce qui a lance la dictee.
@@ -357,12 +377,7 @@ fn boucle_apercu(
         }
         if let Ok(transcription) = resultat {
             // Meme mise en forme que le texte final : la bulle montre ce qui va s'ecrire.
-            let texte = texte::transformer(
-                transcription.texte.trim(),
-                &reglages.substitutions,
-                reglages.majuscule_automatique,
-                reglages.typographie_francaise,
-            );
+            let texte = mettre_en_forme(transcription.texte.trim(), &reglages);
             if !texte.is_empty() {
                 bulle::ecrire(&app, &texte);
             }
@@ -621,12 +636,7 @@ fn transcrire_et_ecrire(
         eprintln!("historique : {message}");
     }
 
-    let transforme = texte::transformer(
-        brut,
-        &reglages.substitutions,
-        reglages.majuscule_automatique,
-        reglages.typographie_francaise,
-    );
+    let transforme = mettre_en_forme(brut, reglages);
     let texte = texte::encadrer(&transforme, reglages.espace_avant, reglages.auto_entree);
     let texte = texte.as_str();
 
