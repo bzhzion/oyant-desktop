@@ -271,6 +271,25 @@ jobs:
               exit 1
             fi
             cp "$paquet" "diffusion/$(basename "$paquet")"
+
+            # ⛔ Le rpm et l'AppImage etaient construits a CHAQUE tag par `bundle.targets: all`,
+            # puis jetes avec `target/` : le journal du 0.3.0 les nomme tous les deux. Les
+            # ramasser ne coute rien, et ce sont deux des quatre formats qui manquaient.
+            for motif in "rpm/*.rpm" "appimage/*.AppImage"; do
+              fichier=$(find src-tauri/target/release/bundle -path "*/$motif" | head -1)
+              if [ -z "$fichier" ]; then
+                echo "::error::aucun fichier $motif produit, alors que bundle.targets vaut 'all'"
+                exit 1
+              fi
+              cp "$fichier" "diffusion/$(basename "$fichier")"
+            done
+
+            # L'archive tar.gz n'a pas d'equivalent chez Tauri : un script l'assemble et la
+            # RELIT, et echoue si elle n'a pas exactement le contenu attendu. Hors tag, la
+            # version de l'archive est celle que le binaire annonce.
+            version="$(./src-tauri/target/release/${{ matrix.binaire }} --version)"
+            python3 scripts/preparer-archive-linux.py --version "$version" \
+              --binaire "diffusion/oyant-${{ matrix.cible }}" --destination diffusion
           fi
 
       - name: Renommer pour la publication (Windows)
@@ -471,7 +490,10 @@ jobs:
 
           setup=$(find diffusion -name '*-setup.exe' | head -1)
           paquet=$(find diffusion -name '*.deb' | head -1)
-          for f in "$setup" "$paquet"; do
+          rpm=$(find diffusion -name '*.rpm' | head -1)
+          appimage=$(find diffusion -name '*.AppImage' | head -1)
+          archive=$(find diffusion -name '*-linux-x64.tar.gz' | head -1)
+          for f in "$setup" "$paquet" "$rpm" "$appimage" "$archive"; do
             if [ -z "$f" ]; then
               echo "::error::un artefact attendu manque dans les telechargements"
               exit 1
@@ -492,6 +514,16 @@ jobs:
           # Ce fichier n'existe que pour qui veut un telechargement direct sans ajouter le depot.
           aws s3 cp "$paquet" "$DEPOT/Oyant-Linux-x64.deb" --endpoint-url "$r2" \
             --content-type application/vnd.debian.binary-package
+
+          # ⚠️ rpm, AppImage et tar.gz n'ont pas de depot qui garde leurs versions : la copie
+          # versionnee est la release GitHub (depot public), qui les porte tous. Ici, le seul nom
+          # fixe que le site vise.
+          aws s3 cp "$rpm" "$DEPOT/Oyant-Linux-x64.rpm" --endpoint-url "$r2" \
+            --content-type application/x-rpm
+          aws s3 cp "$appimage" "$DEPOT/Oyant-Linux-x64.AppImage" --endpoint-url "$r2" \
+            --content-type application/octet-stream
+          aws s3 cp "$archive" "$DEPOT/Oyant-Linux-x64.tar.gz" --endpoint-url "$r2" \
+            --content-type application/gzip
 
       - name: Lire le manifeste existant
         run: |
@@ -529,10 +561,18 @@ jobs:
               "versioned_url": f"{base}/Oyant-Setup-x64-{version}.exe",
               "version": version,
           }
+          # ⚠️ `linux_x64` reste le `.deb` : c'est la cle que les sites lisent deja. Les autres
+          # formats ont chacun la leur, plutot que de changer le sens d'une cle existante.
           fichiers["linux_x64"] = {
               "url": f"{base}/Oyant-Linux-x64.deb",
               "version": version,
           }
+          for cle, extension in (
+              ("linux_x64_rpm", "rpm"),
+              ("linux_x64_appimage", "AppImage"),
+              ("linux_x64_tar_gz", "tar.gz"),
+          ):
+              fichiers[cle] = {"url": f"{base}/Oyant-Linux-x64.{extension}", "version": version}
 
           manifeste = {"version": version, "tag": tag, "files": fichiers}
           with open("latest.json", "w", newline="") as f:

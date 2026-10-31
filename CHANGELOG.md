@@ -9,6 +9,14 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Linux en rpm, AppImage et tar.gz**, en plus du deb (apt) et du paquet pacman. Le rpm et
+  l'AppImage étaient construits à chaque tag puis jetés ; ils sont maintenant publiés, sur la
+  release GitHub et sous un nom fixe sur `dl.breizhzion.com/oyant-desktop/`
+  (`Oyant-Linux-x64.rpm`, `.AppImage`, `.tar.gz`), avec chacun sa clé dans `latest.json`
+  (`linux_x64` reste le deb, que les sites lisent déjà). L'archive tar.gz est assemblée par
+  `scripts/preparer-archive-linux.py` : binaire, icône, entrée de menu, licence, notice et mode
+  d'emploi, reproductible, et RELUE après écriture (prouvé rouge sur un binaire non exécutable).
+
 - **Connexion d'un téléphone par QR code**, quand la découverte automatique ne le trouve pas :
   l'onglet Téléphone affiche un code qui porte les adresses de l'ordinateur, son port et
   l'empreinte de son certificat. Le téléphone épingle cette empreinte comme celle de l'annonce, et
