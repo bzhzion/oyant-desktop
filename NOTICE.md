@@ -85,6 +85,20 @@ released by NVIDIA under the Creative Commons Attribution 4.0 International lice
 - Conversion: <https://huggingface.co/ggml-org/parakeet-GGUF>
 - Licence: <https://creativecommons.org/licenses/by/4.0/>
 
+## SenseVoice model and sherpa-onnx
+
+When the user selects SenseVoice, the application downloads the **SenseVoice Small** model by
+Alibaba's FunAudioLLM team, as exported to ONNX and quantized to 8 bits by the sherpa-onnx
+project, and the **sherpa-onnx** program that runs it. The model's vocabulary file
+(`tokens.txt`) is **embedded** in the application.
+
+- Model: SenseVoice, <https://github.com/FunAudioLLM/SenseVoice>, © Alibaba Group, distributed
+  under the FunASR Model License (<https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE>),
+  which requires keeping the source, the author and the model name, as done here.
+- ONNX export: <https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17>
+- Program: sherpa-onnx, <https://github.com/k2-fsa/sherpa-onnx>, Apache License 2.0, with ONNX
+  Runtime (MIT) inside its release archive.
+
 ## Silero VAD model
 
 The application **embeds** `ggml-silero-v6.2.0.bin`, the Silero voice activity detection model

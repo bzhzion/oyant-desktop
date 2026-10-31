@@ -26,6 +26,7 @@ mod raccourci;
 mod reglages;
 mod reseau;
 mod serveur;
+mod sherpa;
 mod texte;
 mod vad;
 

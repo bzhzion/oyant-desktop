@@ -465,7 +465,13 @@ mod tests {
         let propose = crate::modeles::par_identifiant(&defaut)
             .expect("le modele par defaut doit exister au catalogue");
 
-        for modele in crate::modeles::CATALOGUE {
+        // ⚠️ Parmi les modeles qui transcrivent le FRANCAIS seulement : SenseVoice est plus leger,
+        // mais il ne connait pas le francais, il ne peut donc pas servir de defaut a un produit
+        // francophone. Sans ce filtre, le test aurait pousse a en faire le defaut.
+        for modele in crate::modeles::CATALOGUE
+            .iter()
+            .filter(|m| m.famille.connait("fr"))
+        {
             assert!(
                 modele.taille >= propose.taille,
                 "« {} » pese {} octets et le defaut « {defaut} » en pese {} : le defaut n'est pas le plus leger",

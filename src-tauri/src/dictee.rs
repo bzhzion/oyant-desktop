@@ -43,6 +43,11 @@ pub enum Manque {
         modele: String,
         moteur: String,
     },
+    /// Le programme propre au modele (SenseVoice) n'est pas installe, ou n'existe pas ici.
+    ProgrammeAbsent {
+        modele: String,
+        installable: bool,
+    },
 }
 
 /// De quoi lancer une transcription.
@@ -78,6 +83,31 @@ pub fn resoudre(modele_id: &str, langue: &str) -> Result<Outils, Manque> {
         .join(modele.fichier);
     if !chemin_modele.is_file() {
         return Err(Manque::ModeleAbsent(modele_id.to_string()));
+    }
+
+    // SenseVoice a son propre programme (`sherpa.rs`) : le moteur whisper.cpp choisi n'y joue
+    // aucun role, il ne doit donc pas pouvoir le faire refuser.
+    if modele.famille == modeles::Famille::SenseVoice {
+        let nom = modele.nom.to_string();
+        if !crate::sherpa::disponible() {
+            return Err(Manque::ProgrammeAbsent {
+                modele: nom,
+                installable: false,
+            });
+        }
+        let executable = crate::sherpa::executable().ok_or(Manque::ProgrammeAbsent {
+            modele: nom.clone(),
+            installable: true,
+        })?;
+        crate::sherpa::tokens().map_err(|_| Manque::ProgrammeAbsent {
+            modele: nom,
+            installable: true,
+        })?;
+        return Ok(Outils {
+            executable,
+            modele: chemin_modele,
+            famille: modele.famille,
+        });
     }
 
     let moteur = moteur::actif().ok_or(Manque::AucunMoteur)?;
@@ -145,6 +175,19 @@ impl Manque {
                 "{modele} ne fonctionne pas encore avec « {moteur} ». Choisissez « Le processeur » \
                  dans les réglages, ou un modèle Whisper."
             ),
+            Manque::ProgrammeAbsent {
+                modele,
+                installable: true,
+            } => format!(
+                "Le programme qui fait tourner {modele} n'est pas installé. Choisissez de nouveau \
+                 {modele} dans les réglages pour l'installer."
+            ),
+            Manque::ProgrammeAbsent {
+                modele,
+                installable: false,
+            } => format!(
+                "{modele} n'est pas disponible sur ce système. Choisissez un modèle Whisper."
+            ),
         }
     }
 
@@ -170,6 +213,17 @@ impl Manque {
                 "{modele} does not run on the engine \"{moteur}\" yet.\nSelect the CPU engine in \
                  Oyant, or a Whisper model."
             ),
+            Manque::ProgrammeAbsent {
+                modele,
+                installable: true,
+            } => format!(
+                "The program that runs {modele} is not installed.\nSelect {modele} again in Oyant \
+                 to install it."
+            ),
+            Manque::ProgrammeAbsent {
+                modele,
+                installable: false,
+            } => format!("{modele} is not available on this system. Use a Whisper model."),
         }
     }
 }

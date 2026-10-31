@@ -308,7 +308,35 @@ pub fn executable_pour(
             }
             Ok(dossier(moteur)?.join(moteur.executable_parakeet))
         }
+        // SenseVoice ne depend pas du moteur choisi : il a son propre programme.
+        crate::modeles::Famille::SenseVoice => crate::sherpa::executable()
+            .ok_or_else(|| "Le programme de SenseVoice n'est pas installé.".to_string()),
     }
+}
+
+/// Les arguments de `sherpa-onnx-offline`, qui ne ressemblent en rien a ceux de whisper.cpp.
+///
+/// ⚠️ Le vocabulaire est cherche A COTE du modele (`sherpa::tokens` l'y ecrit avant la dictee),
+/// et la langue `auto` se dit telle quelle : SenseVoice la detecte parmi les siennes.
+fn arguments_sensevoice(demande: &Demande) -> Vec<std::ffi::OsString> {
+    let option = |nom: &str, valeur: &std::ffi::OsStr| {
+        let mut argument = std::ffi::OsString::from(nom);
+        argument.push(valeur);
+        argument
+    };
+    let tokens = demande.modele.with_file_name(crate::sherpa::FICHIER_TOKENS);
+    vec![
+        option("--sense-voice-model=", demande.modele.as_os_str()),
+        option("--tokens=", tokens.as_os_str()),
+        option(
+            "--sense-voice-language=",
+            std::ffi::OsStr::new(demande.langue),
+        ),
+        // Ponctuation et nombres en chiffres, comme le rend Whisper.
+        "--sense-voice-use-itn=1".into(),
+        format!("--num-threads={}", demande.fils).into(),
+        demande.audio.into(),
+    ]
 }
 
 /// Marque portant l'empreinte de l'ARCHIVE qui a produit cette installation.
@@ -339,7 +367,7 @@ fn a_jour(moteur: &Moteur) -> bool {
         .unwrap_or(false)
 }
 
-fn empreinte_de(chemin: &Path) -> Result<String, String> {
+pub fn empreinte_de(chemin: &Path) -> Result<String, String> {
     let mut fichier =
         fs::File::open(chemin).map_err(|erreur| format!("Lecture impossible : {erreur}"))?;
     let mut hacheur = Sha256::new();
@@ -573,7 +601,7 @@ pub async fn installer_moteur(app: AppHandle, identifiant: String) -> Result<Eta
         }
         fs::create_dir_all(&cible).map_err(|erreur| format!("Répertoire non créé : {erreur}"))?;
 
-        deballer(&archive, &cible, moteur.prefixe)?;
+        deballer(&archive, format_archive(moteur.url), &cible, moteur.prefixe)?;
         let _ = fs::remove_file(&archive);
 
         // ⚠️ La marque est ecrite EN DERNIER : si l'extraction echoue a mi-chemin, l'installation
@@ -600,23 +628,46 @@ pub async fn installer_moteur(app: AppHandle, identifiant: String) -> Result<Eta
 /// chemins comme `../../ailleurs` : sans ce controle, deballer ecrirait n'importe ou sur le
 /// disque. Le fichier vient d'un tiers, il se traite comme une entree non fiable meme quand son
 /// empreinte est conforme, puisque l'empreinte prouve l'origine et pas l'innocuite.
-/// Le format d'une archive, decide par son NOM et non par la plateforme.
-///
-/// ⚠️ Decider sur l'extension plutot que sur `cfg!(windows)` garde le code testable partout : le
-/// deballage d'un `tar.gz` se verifie depuis Windows, alors qu'une branche conditionnelle a la
-/// plateforme ne serait compilee que sur la machine qui ne peut pas la tester.
-fn est_tar_gz(archive: &Path) -> bool {
-    archive
-        .to_string_lossy()
-        .to_ascii_lowercase()
-        .ends_with(".tar.gz")
+/// Les formats d'archive que l'on sait deballer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormatArchive {
+    Zip,
+    TarGz,
+    TarBz2,
 }
 
-fn deballer(archive: &Path, cible: &Path, prefixe: &str) -> Result<(), String> {
-    if est_tar_gz(archive) {
-        return deballer_tar(archive, cible, prefixe);
+/// Le format d'une archive, decide par l'ADRESSE de telechargement.
+///
+/// ⛔ **Jamais par le nom du fichier sur le disque** : il est enregistre sous `<moteur>.partiel`,
+/// sans extension. Decider sur ce nom-la faisait ouvrir comme un zip le `tar.gz` publie pour
+/// Linux, donc echouer toute installation de moteur depuis l'ecran sous Linux (corrige le
+/// 2026-10-31). L'adresse, elle, porte la vraie extension.
+///
+/// ⚠️ Et sur l'extension plutot que sur `cfg!(windows)` : la decision se verifie alors depuis
+/// n'importe quelle machine.
+pub fn format_archive(adresse: &str) -> FormatArchive {
+    let adresse = adresse.to_ascii_lowercase();
+    if adresse.ends_with(".tar.gz") || adresse.ends_with(".tgz") {
+        FormatArchive::TarGz
+    } else if adresse.ends_with(".tar.bz2") {
+        FormatArchive::TarBz2
+    } else {
+        FormatArchive::Zip
     }
-    deballer_zip(archive, cible, prefixe)
+}
+
+pub fn deballer(
+    archive: &Path,
+    format: FormatArchive,
+    cible: &Path,
+    prefixe: &str,
+) -> Result<(), String> {
+    match format {
+        FormatArchive::Zip => deballer_zip(archive, cible, prefixe),
+        FormatArchive::TarGz | FormatArchive::TarBz2 => {
+            deballer_tar(archive, format, cible, prefixe)
+        }
+    }
 }
 
 /// Deballe une archive `tar.gz`, celle que l'amont publie pour Linux.
@@ -630,10 +681,19 @@ fn deballer(archive: &Path, cible: &Path, prefixe: &str) -> Result<(), String> {
 /// 3. Il peut viser **hors** du repertoire cible, exactement comme un zip. Les memes garde-fous
 ///    s'appliquent donc, et ils sont ecrits ici plutot que delegues : `unpack` en pose de son
 ///    cote, mais s'en remettre a la bibliotheque rendrait la protection invisible a la relecture.
-fn deballer_tar(archive: &Path, cible: &Path, prefixe: &str) -> Result<(), String> {
+fn deballer_tar(
+    archive: &Path,
+    format: FormatArchive,
+    cible: &Path,
+    prefixe: &str,
+) -> Result<(), String> {
     let fichier =
         fs::File::open(archive).map_err(|erreur| format!("Archive illisible : {erreur}"))?;
-    let flux = flate2::read::GzDecoder::new(fichier);
+    // `tar.bz2` : le format dans lequel sherpa-onnx publie ses programmes (SenseVoice).
+    let flux: Box<dyn Read> = match format {
+        FormatArchive::TarBz2 => Box::new(bzip2::read::BzDecoder::new(fichier)),
+        _ => Box::new(flate2::read::GzDecoder::new(fichier)),
+    };
     let mut tar = tar::Archive::new(flux);
     // Sans cela, les droits du tar sont ignores et l'executable arrive non executable.
     tar.set_preserve_permissions(true);
@@ -1005,6 +1065,9 @@ pub struct Demande<'a> {
 /// Fonction PURE : elle se teste sans moteur installe, et c'est la que se joue la difference
 /// entre les deux familles.
 pub fn arguments(demande: &Demande) -> Vec<std::ffi::OsString> {
+    if demande.famille == crate::modeles::Famille::SenseVoice {
+        return arguments_sensevoice(demande);
+    }
     let mut arguments: Vec<std::ffi::OsString> = vec![
         "-m".into(),
         demande.modele.into(),
@@ -1021,6 +1084,8 @@ pub fn arguments(demande: &Demande) -> Vec<std::ffi::OsString> {
             // ce que `Famille::connait` a verifie avant d'arriver ici.
             arguments.push("--no-prints".into());
         }
+        // Traite plus haut : ses arguments n'ont rien de commun avec ceux de whisper.cpp.
+        crate::modeles::Famille::SenseVoice => {}
         crate::modeles::Famille::Whisper => {
             arguments.extend([
                 "-l".into(),
@@ -1091,7 +1156,14 @@ pub fn transcrire(executable: &Path, demande: &Demande) -> Result<Transcription,
     }
 
     Ok(Transcription {
-        texte: nettoyer(&String::from_utf8_lossy(&sortie.stdout)),
+        // ⚠️ SenseVoice ecrit une ligne JSON, pas du texte : la lire comme Whisper taperait des
+        // accolades et des balises de langue dans l'application de l'utilisateur.
+        texte: match demande.famille {
+            crate::modeles::Famille::SenseVoice => {
+                crate::sherpa::texte_de_la_sortie(&String::from_utf8_lossy(&sortie.stdout))
+            }
+            _ => nettoyer(&String::from_utf8_lossy(&sortie.stdout)),
+        },
         secondes: debut.elapsed().as_secs_f64(),
     })
 }
@@ -1236,6 +1308,41 @@ pub fn nettoyer(brut: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ⛔ **Garde le defaut corrige le 2026-10-31** : le format se lisait sur le nom du fichier
+    /// telecharge (`<moteur>.partiel`, sans extension), si bien que le `tar.gz` de Linux etait ouvert
+    /// comme un zip. Chaque adresse du catalogue doit designer un format que l'on sait deballer, et
+    /// le nom de fichier temporaire, lui, ne doit plus jamais suffire.
+    #[test]
+    fn le_format_d_archive_se_lit_sur_l_adresse() {
+        assert_eq!(
+            format_archive("https://exemple.org/whisper-bin-ubuntu-x64.tar.gz"),
+            FormatArchive::TarGz
+        );
+        assert_eq!(
+            format_archive(
+                "https://exemple.org/sherpa-onnx-v2.0.1-linux-x64-shared-no-tts.tar.bz2"
+            ),
+            FormatArchive::TarBz2
+        );
+        assert_eq!(
+            format_archive("https://exemple.org/a.zip"),
+            FormatArchive::Zip
+        );
+        for moteur in MOTEURS.iter().filter(|m| !m.embarque) {
+            let attendu = if moteur.url.ends_with(".zip") {
+                FormatArchive::Zip
+            } else {
+                FormatArchive::TarGz
+            };
+            assert_eq!(
+                format_archive(moteur.url),
+                attendu,
+                "{}",
+                moteur.identifiant
+            );
+        }
+    }
 
     #[test]
     fn les_segments_sont_recolles_en_une_seule_phrase() {

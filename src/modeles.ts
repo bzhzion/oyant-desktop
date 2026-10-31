@@ -29,9 +29,17 @@ export type EtatModele = {
 
 type Mesure = {
   fois_plus_rapide_que_la_parole: number;
-  erreurs_pour_cent: number;
-  erreurs_pour_cent_pire_voix: number;
+  // `null` pour un modele qui ne transcrit pas le francais : le corpus de mesure est en francais.
+  erreurs_pour_cent: number | null;
+  erreurs_pour_cent_pire_voix: number | null;
 };
+
+function erreurs(valeur: number | null | undefined): string {
+  if (valeur === undefined) return 'non mesuré';
+  // Dit en toutes lettres, jamais un tiret : un tiret se lirait « zéro erreur ».
+  if (valeur === null) return 'pas le français';
+  return `${nombre(valeur)} %`;
+}
 
 type ContexteMesures = { date: string; machine: string; corpus: string; script: string };
 
@@ -103,8 +111,8 @@ function tableauComparatif(): HTMLElement {
       taille(etat.taille_attendue),
       etat.langues,
       m ? pourUneMinute(m.fois_plus_rapide_que_la_parole) : 'non mesuré',
-      m ? `${nombre(m.erreurs_pour_cent)} %` : 'non mesuré',
-      m ? `${nombre(m.erreurs_pour_cent_pire_voix)} %` : 'non mesuré',
+      erreurs(m?.erreurs_pour_cent),
+      erreurs(m?.erreurs_pour_cent_pire_voix),
     ]) {
       ligne.insertCell().textContent = valeur;
     }

@@ -9,6 +9,23 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Nouveau moteur : SenseVoice, très rapide pour le coréen, le chinois et le japonais.** C'est
+  la langue que Parakeet ne connaît pas. Mesuré le 2026-10-31 sur un extrait coréen de 4,6 s :
+  bon texte en 1,8 s chargement compris (0,11 s de calcul), contre 4,3 s pour Whisper Small ; et
+  **12,3 fois plus vite que la parole** dans le tableau comparatif, le plus rapide de tous.
+  ⛔ **Il ne transcrit pas le français** : refusé avant d'ouvrir le micro, et sa colonne
+  d'erreurs dit « pas le français » plutôt qu'un chiffre mesuré sur une langue qu'il ne connaît
+  pas. SenseVoice passe par son propre programme, **sherpa-onnx (21 Mo)**, installé au premier
+  choix du modèle depuis la publication officielle, empreinte vérifiée avant déballage. Son
+  vocabulaire (316 Ko) est intégré à Oyant, avec `-text` dans `.gitattributes` pour que git ne
+  convertisse jamais ses fins de ligne. Windows et Linux x64. Éprouvé de bout en bout : le code
+  d'Oyant installe le programme puis transcrit un vrai extrait coréen (test manuel
+  `installation_et_transcription_reelles`), et la ligne de commande transcrit coréen et japonais.
+  Attribution du modèle (licence FunASR) et de sherpa-onnx (Apache 2.0) dans `NOTICE.md`.
+- **`scripts/mesurer-modeles.py --seulement`**, réservé aux modèles sans taux d'erreurs en
+  français : la référence de chaque extrait croise tous les modèles mesurés, la caler sur un seul
+  la rendrait plus indulgente pour lui. Refuse aussi de mélanger deux machines.
+
 - **Mode bascule du raccourci : un appui pour commencer, un appui pour finir.** Réglage « Façon
   de dicter », le maintien reste le défaut. ⛔ **Accepté par painteau le 2026-10-31 à une
   condition, qu'un micro ouvert sans touche tenue se voie** : l'icône passe au rouge, ET la bulle
@@ -122,6 +139,13 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
   mégaoctet). Un test vérifie que le catalogue et `scripts/preparer-moteur-embarque.py` restent
   d'accord. Son attribution CC BY 4.0 (NVIDIA, conversion ggml-org) est dans `NOTICE.md`, avec la
   licence MIT du modèle de détection de parole.
+
+### Corrigé
+
+- **Sous Linux, installer un moteur depuis l'écran échouait à coup sûr.** L'archive téléchargée
+  est enregistrée sous `<moteur>.partiel`, sans extension, et le format était deviné sur ce nom :
+  le `tar.gz` publié pour Linux était ouvert comme un zip. Le format se décide désormais sur
+  l'adresse de téléchargement (`moteur::format_archive`, fonction pure testée).
 
 ### Modifié
 

@@ -58,8 +58,11 @@ const MESURES: &str = include_str!("../mesures-modeles.json");
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 pub struct Mesure {
     pub fois_plus_rapide_que_la_parole: f64,
-    pub erreurs_pour_cent: f64,
-    pub erreurs_pour_cent_pire_voix: f64,
+    /// `None` pour un modele qui ne transcrit pas le francais : le corpus de mesure est en
+    /// francais, et un taux d'erreurs sur une langue que le modele ne connait pas serait un chiffre
+    /// juste et trompeur. L'ecran le dit en toutes lettres.
+    pub erreurs_pour_cent: Option<f64>,
+    pub erreurs_pour_cent_pire_voix: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
@@ -101,6 +104,8 @@ pub fn contexte_mesures() -> Option<ContexteMesures> {
 pub enum Famille {
     Whisper,
     Parakeet,
+    /// Lu par `sherpa-onnx-offline` (`sherpa.rs`), pas par whisper.cpp.
+    SenseVoice,
 }
 
 /// Les langues que Parakeet v3 sait transcrire, en codes ISO 639-1.
@@ -115,6 +120,11 @@ pub const LANGUES_PARAKEET: &[&str] = &[
     "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "uk",
 ];
 
+/// Les langues de SenseVoice, relevees sur la fiche du modele : coreen, chinois, japonais,
+/// anglais et cantonais. ⚠️ **Ni le francais ni aucune autre langue europeenne hors l'anglais** :
+/// c'est le modele rapide pour l'Asie de l'Est, pas un remplacant de Whisper.
+pub const LANGUES_SENSEVOICE: &[&str] = &["ko", "zh", "ja", "en", "yue"];
+
 impl Famille {
     /// Cette famille sait-elle transcrire la langue demandee ?
     ///
@@ -124,6 +134,7 @@ impl Famille {
         match self {
             Famille::Whisper => true,
             Famille::Parakeet => langue == "auto" || LANGUES_PARAKEET.contains(&langue),
+            Famille::SenseVoice => langue == "auto" || LANGUES_SENSEVOICE.contains(&langue),
         }
     }
 }
@@ -177,6 +188,19 @@ pub const CATALOGUE: &[Modele] = &[
         description: "Deux à trois fois plus rapide que Small, souvent plus juste en français. Langues européennes seulement (pas de coréen), sans vocabulaire personnalisé. Utilise la carte graphique si vous l'avez choisie.",
         famille: Famille::Parakeet,
         langues: "25 langues européennes, sans le coréen",
+    },
+    // SenseVoice Small, export ONNX quantifie en int8 par sherpa-onnx. Taille et empreinte LUES
+    // sur l'API HuggingFace (identifiant LFS) le 2026-10-31.
+    Modele {
+        identifiant: "sensevoice",
+        nom: "SenseVoice",
+        fichier: "sensevoice-small-2024-07-17-int8.onnx",
+        url: "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx",
+        taille: 239_233_841,
+        empreinte: "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
+        description: "Très rapide, pour le coréen, le chinois, le japonais et l'anglais. Ne transcrit pas le français. Installe aussi son propre programme (21 Mo) au premier choix.",
+        famille: Famille::SenseVoice,
+        langues: "Coréen, chinois, japonais, anglais et cantonais",
     },
 ];
 
@@ -366,6 +390,14 @@ pub async fn choisir_modele(
     let fichier = chemin(&app, modele)?;
     if taille_sur_disque(&fichier) != modele.taille {
         telecharger_modele(app.clone(), identifiant.clone()).await?;
+    }
+
+    // ⚠️ SenseVoice a besoin de son propre programme : l'installer ICI, au choix du modele, et pas
+    // a la premiere dictee, ou l'on attendrait un telechargement apres avoir deja parle.
+    if modele.famille == Famille::SenseVoice && crate::sherpa::executable().is_none() {
+        tauri::async_runtime::spawn_blocking(crate::sherpa::installer)
+            .await
+            .map_err(|erreur| format!("Installation interrompue : {erreur}"))??;
     }
 
     let mut reglages = crate::reglages::lire_sans_application();
@@ -655,16 +687,21 @@ mod tests {
                 .find("aide:")
                 .expect("l'aide qui suit la liste");
         let bloc = &interface[debut..fin];
-        let mut refusees = Vec::new();
-        for ligne in bloc.lines() {
-            if let Some(reste) = ligne.trim().strip_prefix("['") {
-                let code = reste.split('\'').next().unwrap_or("");
-                if !Famille::Parakeet.connait(code) {
-                    refusees.push(code.to_string());
-                }
-            }
-        }
-        assert_eq!(refusees, vec!["ko".to_string()]);
+        let codes: Vec<&str> = bloc
+            .lines()
+            .filter_map(|ligne| ligne.trim().strip_prefix("['"))
+            .map(|reste| reste.split('\'').next().unwrap_or(""))
+            .collect();
+        let refusees = |famille: Famille| -> Vec<&str> {
+            codes
+                .iter()
+                .copied()
+                .filter(|code| !famille.connait(code))
+                .collect()
+        };
+        assert_eq!(refusees(Famille::Parakeet), vec!["ko"]);
+        // SenseVoice ne connait aucune langue europeenne hors l'anglais.
+        assert_eq!(refusees(Famille::SenseVoice), vec!["fr", "pt", "es", "de"]);
     }
 
     /// ⛔ **Un modele ajoute au catalogue sans etre mesure aurait une ligne vide dans le tableau
@@ -682,6 +719,14 @@ mod tests {
             assert!(
                 m.fois_plus_rapide_que_la_parole > 0.0,
                 "{}",
+                modele.identifiant
+            );
+            // ⛔ Un modele qui transcrit le francais DOIT avoir son taux d'erreurs : seul celui qui
+            // ne le connait pas a le droit de ne pas en avoir, sinon on cacherait une mesure.
+            assert_eq!(
+                m.erreurs_pour_cent.is_some(),
+                modele.famille.connait("fr"),
+                "{} : taux d'erreurs present si et seulement si le modele connait le francais",
                 modele.identifiant
             );
             assert!(

@@ -52,7 +52,15 @@ MODELES = {
     "medium": ("whisper", "ggml-medium.bin"),
     "large-v3": ("whisper", "ggml-large-v3.bin"),
     "parakeet-v3": ("parakeet", "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"),
+    "sensevoice": ("sensevoice", "sensevoice-small-2024-07-17-int8.onnx"),
 }
+
+# Les familles qui ne transcrivent pas le francais : le corpus est en francais, donc on n'y
+# mesure que la VITESSE, et le taux d'erreurs vaut `null` (l'ecran dit « pas le francais »).
+SANS_FRANCAIS = {"sensevoice"}
+
+TOKENS_SENSEVOICE = RACINE / "src-tauri" / "sensevoice" / "tokens.txt"
+SHERPA = Path(os.environ.get("LOCALAPPDATA", "")) / "org.breizhzion.oyant.desktop" / "moteurs" / "sherpa-onnx" / "bin" / "sherpa-onnx-offline.exe"
 
 # (identifiant, audio LibriVox, debut en secondes, source du texte)
 VOIX = [
@@ -160,6 +168,9 @@ def transcrire(famille: str, modele: Path, audio: Path) -> tuple[str, float]:
         commande = [MOTEUR / "whisper-cli.exe", "-m", modele, "-l", "fr", "-t", str(FILS),
                     "--temperature", "0", "--no-timestamps", "--no-prints",
                     "--vad", "-vm", VAD, "-f", audio]
+    elif famille == "sensevoice":
+        commande = [SHERPA, f"--sense-voice-model={modele}", f"--tokens={TOKENS_SENSEVOICE}",
+                    "--sense-voice-language=auto", "--sense-voice-use-itn=1", f"--num-threads={FILS}", audio]
     else:
         commande = [MOTEUR / "parakeet-cli.exe", "-m", modele, "-t", str(FILS), "--no-prints", "-f", audio]
     debut = time.perf_counter()
@@ -167,7 +178,11 @@ def transcrire(famille: str, modele: Path, audio: Path) -> tuple[str, float]:
     duree = time.perf_counter() - debut
     if resultat.returncode != 0:
         sys.exit(f"echec de {modele.name} sur {audio.name} : {resultat.stderr.decode('utf-8', 'replace')[-400:]}")
-    return resultat.stdout.decode("utf-8", "replace"), duree
+    sortie = resultat.stdout.decode("utf-8", "replace")
+    if famille == "sensevoice":
+        # Une ligne JSON par fichier : seul le champ `text` est du texte dicte.
+        sortie = " ".join(json.loads(l).get("text", "") for l in sortie.splitlines() if l.lstrip().startswith("{"))
+    return sortie, duree
 
 
 def nom_lisible(brut: str) -> str:
@@ -194,24 +209,39 @@ def main() -> None:
     analyseur.add_argument("--modeles", type=Path, action="append", default=[],
                            help="repertoire supplementaire ou chercher les modeles")
     analyseur.add_argument("--passages", type=int, default=3)
+    analyseur.add_argument("--seulement", action="append", default=[],
+                           help="ne mesurer que ce modele et garder les autres mesures du fichier")
     arguments = analyseur.parse_args()
 
-    for requis in [MOTEUR / "whisper-cli.exe", MOTEUR / "parakeet-cli.exe", VAD]:
+    # ⛔ `--seulement` est reserve aux modeles SANS taux d'erreurs en francais. La reference de
+    # chaque extrait est choisie en croisant TOUS les modeles mesures : la caler sur un seul la
+    # rendrait plus indulgente pour lui. Pour un modele qui transcrit le francais, on remesure tout.
+    a_mesurer = arguments.seulement or list(MODELES)
+    if arguments.seulement:
+        hors = [m for m in arguments.seulement if m not in SANS_FRANCAIS]
+        if hors:
+            sys.exit(f"--seulement refuse pour {hors} : leur taux d'erreurs demande de remesurer tous les modeles.")
+
+    for requis in [MOTEUR / "whisper-cli.exe", MOTEUR / "parakeet-cli.exe", VAD, TOKENS_SENSEVOICE]:
         if not requis.exists():
             sys.exit(f"manquant : {requis}\nLancer python scripts/preparer-moteur-embarque.py")
 
     repertoires = arguments.modeles + [
         Path(os.environ["LOCALAPPDATA"]) / "org.breizhzion.oyant.desktop" / "modeles"
     ]
+    if "sensevoice" in a_mesurer and not SHERPA.is_file():
+        sys.exit(f"manquant : {SHERPA}\nChoisir SenseVoice une fois dans Oyant pour installer son programme.")
     chemins = {}
     for identifiant, (famille, fichier) in MODELES.items():
+        if identifiant not in a_mesurer:
+            continue
         trouve = next((r / fichier for r in repertoires if (r / fichier).is_file()), None)
         if trouve is None:
             sys.exit(f"modele absent : {fichier}\nLe telecharger dans Oyant, ou passer --modeles.")
         chemins[identifiant] = (famille, trouve)
 
-    sorties: dict[str, dict[str, list[str]]] = {i: {} for i in MODELES}
-    durees: dict[str, list[float]] = {i: [] for i in MODELES}
+    sorties: dict[str, dict[str, list[str]]] = {i: {} for i in chemins}
+    durees: dict[str, list[float]] = {i: [] for i in chemins}
     for voix, url, debut, source in VOIX:
         mp3 = telecharger(url, TRAVAIL / f"{voix}.mp3")
         wav = TRAVAIL / f"{voix}-{debut}-{DUREE}.wav"
@@ -225,18 +255,24 @@ def main() -> None:
             sorties[identifiant][voix] = mots(texte)
             print(f"  {voix:22} {identifiant:12} {duree:6.1f} s")
 
-    erreurs: dict[str, dict[str, float]] = {i: {} for i in MODELES}
-    for voix, _, _, source in VOIX:
+    francais = [i for i in chemins if i not in SANS_FRANCAIS]
+    erreurs: dict[str, dict[str, float]] = {i: {} for i in francais}
+    for voix, _, _, source in VOIX if francais else []:
         livre = mots(texte_source(source))
-        ref = reference(livre, [sorties[i][voix] for i in MODELES])
+        ref = reference(livre, [sorties[i][voix] for i in francais])
         print(f"  reference {voix} : {len(ref)} mots, « {' '.join(ref[:8])} … {' '.join(ref[-5:])} »")
-        for identifiant in MODELES:
+        for identifiant in francais:
             erreurs[identifiant][voix] = 100 * distance(sorties[identifiant][voix], ref) / len(ref)
 
+    machine = f"un {processeur()} ({FILS} cœurs), sans carte graphique"
+    precedent = json.loads(SORTIE.read_text(encoding="utf-8")) if arguments.seulement else None
+    if precedent and precedent["mesure"]["machine"] != machine:
+        sys.exit("--seulement refuse : les mesures existantes viennent d'une autre machine, "
+                 "et un tableau qui melange deux machines comparerait des choses incomparables.")
     resultat = {
         "mesure": {
             "date": datetime.date.today().isoformat(),
-            "machine": f"un {processeur()} ({FILS} cœurs), sans carte graphique",
+            "machine": machine,
             "corpus": f"{len(VOIX)} lectures LibriVox en français, {DUREE} s chacune",
             "script": "scripts/mesurer-modeles.py",
         },
@@ -244,12 +280,18 @@ def main() -> None:
             identifiant: {
                 # Combien de fois plus vite que la parole elle-meme : 10 veut dire 3 s pour 30 s.
                 "fois_plus_rapide_que_la_parole": round(DUREE / statistics.median(durees[identifiant]), 1),
-                "erreurs_pour_cent": round(statistics.mean(erreurs[identifiant].values()), 1),
-                "erreurs_pour_cent_pire_voix": round(max(erreurs[identifiant].values()), 1),
+                "erreurs_pour_cent": round(statistics.mean(erreurs[identifiant].values()), 1)
+                if identifiant in erreurs else None,
+                "erreurs_pour_cent_pire_voix": round(max(erreurs[identifiant].values()), 1)
+                if identifiant in erreurs else None,
             }
-            for identifiant in MODELES
+            for identifiant in chemins
         },
     }
+    if precedent:
+        # On garde les autres modeles et la date de la mesure d'origine.
+        resultat["mesure"] = precedent["mesure"]
+        resultat["modeles"] = {**precedent["modeles"], **resultat["modeles"]}
     SORTIE.write_text(json.dumps(resultat, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(resultat, ensure_ascii=False, indent=2))
 

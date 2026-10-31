@@ -25,6 +25,11 @@
       "fois_plus_rapide_que_la_parole": 7.0,
       "erreurs_pour_cent": 38.6,
       "erreurs_pour_cent_pire_voix": 90.3
+    },
+    "sensevoice": {
+      "fois_plus_rapide_que_la_parole": 12.3,
+      "erreurs_pour_cent": null,
+      "erreurs_pour_cent_pire_voix": null
     }
   }
 }
