@@ -9,6 +9,16 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Connexion d'un téléphone par QR code**, quand la découverte automatique ne le trouve pas :
+  l'onglet Téléphone affiche un code qui porte les adresses de l'ordinateur, son port et
+  l'empreinte de son certificat. Le téléphone épingle cette empreinte comme celle de l'annonce, et
+  le code n'autorise rien à lui seul : les quatre chiffres et l'accord sur l'ordinateur restent
+  obligatoires. Les réseaux privés passent en premier, la boucle locale et les cartes sans
+  adresse sont écartées, quatre adresses au plus. L'écran dit aussi quoi faire quand
+  l'ordinateur n'est pas joignable (case à cocher, relance) et nomme l'isolation des appareils
+  propre aux wifi d'invités. ⚠️ L'état affiché est celui que le serveur a RÉELLEMENT démarré,
+  pas celui des cases, qui ne s'appliquent qu'au lancement.
+
 - **Les hésitations sont retirées** (« euh », « hum », « hmm »…), réglage « Retirer les
   hésitations », activé par défaut. ⛔ **Liste courte et fermée de sons qui ne sont jamais des
   mots** : « ben », « bah » ou « bon » restent, ce sont aussi de vrais mots. Une hésitation

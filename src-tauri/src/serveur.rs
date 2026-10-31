@@ -518,6 +518,11 @@ pub fn demarrer_si_demande(app: &tauri::AppHandle) {
         match servir(adresse, identite, appaires, envoi).await {
             Ok((reelle, _)) => {
                 eprintln!("appairage : à l'écoute sur {reelle}");
+                *etat_ecoute().lock().expect("verrou de l'etat d'ecoute") = if joignable {
+                    EtatEcoute::Joignable
+                } else {
+                    EtatEcoute::LocalSeulement
+                };
                 // ⛔ On n'annonce QUE si l'ordinateur est joignable. Annoncer une ecoute limitee a
                 // la boucle locale ferait TROUVER l'ordinateur par le telephone, puis echouer la
                 // connexion : l'utilisateur verrait son ordinateur dans la liste et conclurait a
@@ -667,6 +672,152 @@ pub fn enregistrer_appaires(liste: &Appaires) -> Result<(), String> {
 pub fn reseau_empreinte() -> Result<String, String> {
     let identite = crate::reseau::identite_tls()?;
     crate::reseau::empreinte_certificat(&identite.certificat_pem)
+}
+
+/// Ce que le serveur fait REELLEMENT, une fois demarre.
+///
+/// ⛔ **Lu par l'ecran, jamais deduit des reglages** : les deux cases ne s'appliquent qu'au
+/// demarrage, donc les relire dirait « joignable » pendant toute la session qui suit la case
+/// cochee, alors que rien n'ecoute encore. Le QR montrerait une adresse morte, et le telephone
+/// conclurait a l'isolation des clients pour une case qui attendait un redemarrage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EtatEcoute {
+    /// Pas demarre : la premiere case etait decochee au lancement.
+    Eteint,
+    /// Demarre sur la boucle locale seulement : aucun telephone ne peut le joindre.
+    LocalSeulement,
+    /// Demarre sur toutes les interfaces : un telephone du meme reseau peut le joindre.
+    Joignable,
+}
+
+fn etat_ecoute() -> &'static std::sync::Mutex<EtatEcoute> {
+    static ETAT: std::sync::OnceLock<std::sync::Mutex<EtatEcoute>> = std::sync::OnceLock::new();
+    ETAT.get_or_init(|| std::sync::Mutex::new(EtatEcoute::Eteint))
+}
+
+/// Les adresses a mettre dans le QR, dans l'ordre ou le telephone les essaiera.
+///
+/// ⚠️ **Plusieurs adresses, pas une** : un ordinateur a souvent plusieurs cartes (wifi, filaire,
+/// VPN, machines virtuelles), et rien ne dit laquelle partage le reseau du telephone. Le telephone
+/// les essaie tour a tour. Les reseaux prives d'abord, puisque c'est la le cas courant ; l'espace
+/// partage des operateurs (100.64/10, celui de Tailscale) ensuite, qui ne marche que si le
+/// telephone est sur le meme reseau prive virtuel. La boucle locale et le lien local (169.254, une
+/// carte sans adresse attribuee) sont exclus : ils ne menent jamais au telephone. Quatre au plus,
+/// sinon le QR grossit au point de se lire mal sur un ecran.
+pub fn adresses_pour_qr(adresses: &[std::net::Ipv4Addr]) -> Vec<std::net::Ipv4Addr> {
+    let rang = |ip: &std::net::Ipv4Addr| -> Option<u8> {
+        let [a, b, ..] = ip.octets();
+        if ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() {
+            None
+        } else if ip.is_private() {
+            Some(0)
+        } else if a == 100 && (64..128).contains(&b) {
+            Some(1)
+        } else {
+            // Une adresse publique sur une carte : rare, et presque jamais le bon chemin.
+            Some(2)
+        }
+    };
+    let mut gardees: Vec<(u8, std::net::Ipv4Addr)> = Vec::new();
+    for ip in adresses {
+        if let Some(r) = rang(ip)
+            && !gardees.iter().any(|(_, deja)| deja == ip)
+        {
+            gardees.push((r, *ip));
+        }
+    }
+    // Tri stable : a rang egal, l'ordre du systeme est garde.
+    gardees.sort_by_key(|(r, _)| *r);
+    gardees.into_iter().take(4).map(|(_, ip)| ip).collect()
+}
+
+/// Le texte du QR : tout ce qu'il faut au telephone pour se connecter sans decouverte.
+///
+/// ⛔ **L'empreinte du certificat y est, et c'est ce qui rend le QR sur.** Le telephone l'epingle
+/// exactement comme celle de l'annonce : quelqu'un qui intercepterait l'adresse ne pourrait pas se
+/// faire passer pour l'ordinateur. Le QR ne porte AUCUN secret d'autorisation : la poignee de main,
+/// les quatre chiffres et le consentement sur l'ordinateur restent obligatoires.
+pub fn charge_qr(hotes: &[std::net::Ipv4Addr], port: u16, empreinte: &str, nom: &str) -> String {
+    let hotes = hotes
+        .iter()
+        .map(|ip| ip.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "oyant://appairer?v={}&h={hotes}&p={port}&e={empreinte}&n={}",
+        crate::appairage::VERSION_PROTOCOLE,
+        pourcent(nom)
+    )
+}
+
+/// Encodage pour URL de ce qui n'est pas une lettre ou un chiffre ASCII.
+fn pourcent(texte: &str) -> String {
+    texte
+        .bytes()
+        .map(|o| {
+            if o.is_ascii_alphanumeric() || matches!(o, b'-' | b'_' | b'.') {
+                (o as char).to_string()
+            } else {
+                format!("%{o:02X}")
+            }
+        })
+        .collect()
+}
+
+/// Le QR du repli, pour l'ecran Telephone.
+#[derive(serde::Serialize)]
+pub struct QrAppairage {
+    /// L'image, en SVG.
+    svg: String,
+    /// Les adresses qu'il contient, a afficher en clair pour qui ne peut pas scanner.
+    adresses: Vec<String>,
+    port: u16,
+}
+
+/// L'etat de l'ecoute et, si l'ordinateur est joignable, le QR a scanner.
+///
+/// Rend l'etat dans tous les cas, pour que l'ecran dise QUOI faire : cocher une case, relancer,
+/// ou rien.
+#[tauri::command]
+pub fn reseau_qr() -> Result<(EtatEcoute, Option<QrAppairage>), String> {
+    let etat = *etat_ecoute().lock().expect("verrou de l'etat d'ecoute");
+    if etat != EtatEcoute::Joignable {
+        return Ok((etat, None));
+    }
+    let adresses: Vec<std::net::Ipv4Addr> = if_addrs::get_if_addrs()
+        .map_err(|e| format!("Adresses illisibles : {e}"))?
+        .into_iter()
+        .filter_map(|interface| match interface.ip() {
+            std::net::IpAddr::V4(ip) => Some(ip),
+            std::net::IpAddr::V6(_) => None,
+        })
+        .collect();
+    let hotes = adresses_pour_qr(&adresses);
+    if hotes.is_empty() {
+        return Err("Aucune carte réseau n’a d’adresse : l’ordinateur n’est sur aucun réseau.".into());
+    }
+    let empreinte = reseau_empreinte()?;
+    let texte = charge_qr(&hotes, crate::reseau::PORT, &empreinte, &hostname_court());
+    let code = qrcode::QrCode::with_error_correction_level(texte.as_bytes(), qrcode::EcLevel::M)
+        .map_err(|e| format!("QR impossible : {e}"))?;
+    // ⚠️ Noir sur blanc, quel que soit le theme : un QR clair sur fond sombre se lit mal, et
+    // certains lecteurs n'acceptent pas l'inversion.
+    let svg = code
+        .render::<qrcode::render::svg::Color>()
+        .min_dimensions(220, 220)
+        .dark_color(qrcode::render::svg::Color("#000000"))
+        .light_color(qrcode::render::svg::Color("#ffffff"))
+        .quiet_zone(true)
+        .build();
+    Ok((
+        etat,
+        Some(QrAppairage {
+            svg,
+            adresses: hotes.iter().map(|ip| ip.to_string()).collect(),
+            port: crate::reseau::PORT,
+        }),
+    ))
 }
 
 /// Les appareils autorises, pour l'ecran de reglages.
@@ -1259,5 +1410,56 @@ mod tests {
             ),
             "un WAV valide de la bonne taille ne doit jamais echouer sur sa FORME : {reponse:?}"
         );
+    }
+
+    #[test]
+    fn le_qr_met_les_reseaux_prives_d_abord_et_ecarte_ce_qui_ne_mene_pas_au_telephone() {
+        use std::net::Ipv4Addr;
+        let adresses = [
+            Ipv4Addr::LOCALHOST,
+            Ipv4Addr::new(100, 101, 102, 103),
+            Ipv4Addr::new(169, 254, 3, 4),
+            Ipv4Addr::new(192, 168, 1, 20),
+            Ipv4Addr::new(10, 0, 0, 5),
+            Ipv4Addr::new(192, 168, 1, 20),
+        ];
+        assert_eq!(
+            adresses_pour_qr(&adresses),
+            vec![
+                Ipv4Addr::new(192, 168, 1, 20),
+                Ipv4Addr::new(10, 0, 0, 5),
+                Ipv4Addr::new(100, 101, 102, 103),
+            ]
+        );
+    }
+
+    #[test]
+    fn le_qr_ne_garde_que_quatre_adresses() {
+        use std::net::Ipv4Addr;
+        let adresses: Vec<Ipv4Addr> = (1..=6).map(|i| Ipv4Addr::new(192, 168, 0, i)).collect();
+        assert_eq!(adresses_pour_qr(&adresses).len(), 4);
+    }
+
+    #[test]
+    fn la_charge_du_qr_porte_adresses_port_empreinte_et_nom_encode() {
+        use std::net::Ipv4Addr;
+        let texte = charge_qr(
+            &[Ipv4Addr::new(192, 168, 1, 20), Ipv4Addr::new(10, 0, 0, 5)],
+            44881,
+            "abc123",
+            "PC de Thierry",
+        );
+        assert_eq!(
+            texte,
+            format!("oyant://appairer?v={VERSION_PROTOCOLE}&h=192.168.1.20,10.0.0.5&p=44881&e=abc123&n=PC%20de%20Thierry")
+        );
+    }
+
+    #[test]
+    fn l_etat_d_ecoute_vaut_eteint_tant_que_rien_n_a_demarre() {
+        // Lu tel quel par l'ecran : un serveur jamais demarre ne doit pas proposer de QR.
+        let (etat, qr) = reseau_qr().expect("l'etat se lit toujours");
+        assert_eq!(etat, EtatEcoute::Eteint);
+        assert!(qr.is_none(), "un QR propose sans ecoute menerait a une adresse morte");
     }
 }

@@ -43,7 +43,8 @@ export function installerAppairage(racine: HTMLElement): void {
   message.setAttribute('role', 'status');
   groupe.append(message);
 
-  racine.append(groupe);
+  // Se connecter d'abord, gérer les appareils ensuite : c'est l'ordre dans lequel on s'en sert.
+  racine.append(construireQr(), groupe);
 
   void rafraichir(liste, message);
 
@@ -93,9 +94,11 @@ function afficherDemande(
 
   const accepter = document.createElement('button');
   accepter.type = 'button';
+  accepter.className = 'action action-principale';
   accepter.textContent = 'Accepter';
   const refuser = document.createElement('button');
   refuser.type = 'button';
+  refuser.className = 'action';
   refuser.textContent = 'Refuser';
 
   const repondre = async (accepte: boolean) => {
@@ -178,4 +181,91 @@ async function rafraichir(liste: HTMLElement, message: HTMLElement): Promise<voi
     ligne.append(texte, revoquer);
     liste.append(ligne);
   }
+}
+
+/** Ce que le cœur dit de son écoute, tel qu'il l'a réellement démarrée. */
+type EtatEcoute = 'eteint' | 'local_seulement' | 'joignable';
+type Qr = { svg: string; adresses: string[]; port: number };
+
+/**
+ * Le repli par QR : se connecter sans compter sur la découverte.
+ *
+ * ⛔ **C'est lui qui sauve le cas de l'isolation des clients**, que beaucoup de box et presque
+ * tous les wifi d'hôtel ou d'invité activent : le téléphone ne voit alors pas l'ordinateur, sans
+ * que rien soit en panne. Le QR porte les adresses, le port et l'empreinte du certificat ; il ne
+ * porte aucune autorisation, les quatre chiffres restent à comparer.
+ *
+ * ⚠️ L'état vient du cœur et pas des cases à cocher : elles ne s'appliquent qu'au démarrage, donc
+ * les relire proposerait un QR vers un ordinateur qui n'écoute pas encore.
+ */
+function construireQr(): HTMLElement {
+  const groupe = document.createElement('fieldset');
+  groupe.className = 'groupe groupe-texte';
+  const legende = document.createElement('legend');
+  legende.textContent = 'Connecter un téléphone';
+  groupe.append(legende);
+
+  const contenu = document.createElement('div');
+  contenu.className = 'appairage-qr';
+  groupe.append(contenu);
+
+  void (async () => {
+    let etat: EtatEcoute;
+    let qr: Qr | null;
+    try {
+      [etat, qr] = await invoke<[EtatEcoute, Qr | null]>('reseau_qr');
+    } catch (erreur) {
+      contenu.append(paragraphe(`Code impossible à afficher : ${String(erreur)}`));
+      return;
+    }
+
+    if (etat === 'eteint') {
+      contenu.append(
+        paragraphe(
+          'Cochez « Accepter les connexions d’un téléphone » et « Autoriser depuis le réseau local » ci-dessus, puis quittez et relancez Oyant.',
+        ),
+      );
+      return;
+    }
+    if (etat === 'local_seulement' || !qr) {
+      contenu.append(
+        paragraphe(
+          'Oyant n’écoute que sur cet ordinateur. Cochez « Autoriser depuis le réseau local » ci-dessus, puis quittez et relancez Oyant.',
+        ),
+      );
+      return;
+    }
+
+    contenu.append(
+      paragraphe(
+        'Dans l’app Oyant de votre téléphone, ouvrez Réglages, Mon ordinateur. Elle trouve cet ordinateur toute seule ; sinon, touchez « Scanner le code » et visez celui-ci.',
+      ),
+    );
+
+    const image = document.createElement('div');
+    image.className = 'qr-image';
+    image.setAttribute('role', 'img');
+    image.setAttribute('aria-label', 'Code à scanner avec l’app Oyant du téléphone');
+    // Le SVG vient du cœur, qui le fabrique lui-même : aucun contenu extérieur n'y passe.
+    image.innerHTML = qr.svg;
+    contenu.append(image);
+
+    contenu.append(
+      paragraphe(
+        `Adresse${qr.adresses.length > 1 ? 's' : ''} de cet ordinateur : ${qr.adresses.join(', ')}, port ${qr.port}.`,
+      ),
+      paragraphe(
+        'Si le téléphone ne se connecte pas même avec le code, votre wifi isole sans doute les appareils les uns des autres, comme beaucoup de réseaux d’invités ou d’hôtel. Ce n’est pas une panne : passez sur votre réseau principal, ou sur le partage de connexion du téléphone.',
+      ),
+    );
+  })();
+
+  return groupe;
+}
+
+function paragraphe(texte: string): HTMLParagraphElement {
+  const p = document.createElement('p');
+  p.className = 'reglage-aide';
+  p.textContent = texte;
+  return p;
 }

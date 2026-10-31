@@ -520,6 +520,31 @@ body {
   margin: 0;
 }
 
+.appairage-qr {
+  display: grid;
+  gap: calc(var(--pas) * 1.5);
+}
+
+.appairage-qr p {
+  margin: 0;
+}
+
+/* ⚠️ Le QR garde son fond BLANC et sa marge blanche dans le thème sombre : beaucoup de lecteurs
+ * ne décodent pas un code inversé, et la marge fait partie du code, pas de la décoration. */
+.qr-image {
+  justify-self: center;
+  width: 220px;
+  line-height: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.qr-image svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* Lu par les lecteurs d'écran, absent à l'écran : pour un titre qui répète le nom de l'onglet.
  * Sélecteur plus précis que `.groupe > legend`, sinon le `float` de celui-ci l'emporterait. */
 .groupe > legend.invisible-a-l-ecran {

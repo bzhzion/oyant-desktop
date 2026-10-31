@@ -339,6 +339,7 @@ fn interface(fenetre_visible: bool) {
             reglages::chemin_reglages,
             reglages::reglages_par_defaut,
             serveur::reseau_empreinte,
+            serveur::reseau_qr,
             serveur::reseau_appareils,
             serveur::reseau_revoquer,
             serveur::reseau_repondre,

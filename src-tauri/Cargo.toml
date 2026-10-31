@@ -79,6 +79,8 @@ ring = "0.17"
 # tiree par transitivite (tauri, rustls-pemfile) sous plusieurs versions : la declarer nous-memes
 # fixe celle que NOTRE code appelle, independamment de ce que d'autres dependances choisissent.
 base64 = "0.22"
+if-addrs = "0.15"
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 
 # ⚠️ Uniquement sur Windows : l'injection au curseur y passe par `SendInput`. Ailleurs elle a une
 # autre implementation (voir `src/platform/mod.rs`), et lier cette caisse partout ferait echouer
