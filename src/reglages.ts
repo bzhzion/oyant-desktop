@@ -101,10 +101,10 @@ const GROUPES: Groupe[] = [
         type: 'choix',
         titre: 'Façon de dicter',
         options: [
-          ['maintien', 'Maintenir les touches pendant que je parle'],
-          ['bascule', 'Appuyer une fois pour commencer, une fois pour finir'],
+          ['maintien', 'Maintenir enfoncé'],
+          ['bascule', 'Un appui pour commencer, un pour finir'],
         ],
-        aide: 'En mode « une fois pour commencer », l’icône d’Oyant devient rouge et une bulle en bas de l’écran rappelle que le micro est ouvert, jusqu’à votre second appui.',
+        aide: 'En mode « un appui pour commencer », l’icône d’Oyant devient rouge et une bulle en bas de l’écran rappelle que le micro est ouvert, jusqu’à votre second appui.',
       },
       {
         cle: 'microphone',

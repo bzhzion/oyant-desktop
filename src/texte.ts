@@ -256,7 +256,9 @@ export function brancherVocabulaire(
   const aide = document.createElement('p');
   aide.className = 'reglage-aide';
   aide.textContent =
-    'Un terme par ligne : noms propres, termes de votre métier, acronymes. Ils sont donnés à la reconnaissance vocale avant qu’elle transcrive, pour qu’elle les écrive correctement du premier coup. Rien n’est remplacé après coup, donc un terme d’ici ne peut pas corriger de travers.';
+    // ⚠️ Cette aide a dit « rien n'est remplace apres coup » jusqu'a la correction approchee du
+    // 2026-10-31 : un texte d'aide decrit le comportement, il doit changer avec lui.
+    'Un terme par ligne : noms propres, termes de votre métier, acronymes. Ils sont donnés à la reconnaissance vocale avant qu’elle transcrive, pour qu’elle les écrive correctement du premier coup. Si un mot transcrit se prononce et s’écrit presque comme l’un d’eux, il est aussi remplacé par votre terme (réglage « Corriger les mots proches de mon vocabulaire », onglet Sortie).';
   groupe.append(aide);
 
   // ⚠️ Cet ajout est AUTOMATIQUE et invisible autrement : sans cette phrase, l'utilisateur ne

@@ -160,6 +160,15 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **Cinq défauts d'affichage des réglages, relevés en passant chaque onglet à 560 px** : les
+  boutons des cartes de modèle tombaient dans la colonne du bouton radio ; une liste au choix
+  long écrasait son libellé à un mot par ligne (« Façon de dicter ») ; la ligne d'un téléphone
+  autorisé collait le nom à l'empreinte avec un bouton « Révoquer » natif étiré ; les onglets
+  dépassaient de 7 px à la largeur par défaut, d'où une barre de défilement à chaque ouverture ;
+  trois descriptions de modèles étaient sans accents. Les choix de « Façon de dicter » sont
+  raccourcis (« Maintenir enfoncé », « Un appui pour commencer, un pour finir »).
+- **L'aide du vocabulaire disait que rien n'est remplacé après coup**, ce qui est faux depuis la
+  correction des mots proches : elle le dit maintenant, et renvoie au réglage qui la coupe.
 - **La CI macOS était rouge depuis l'ajout de la pause de la musique** : sans contrôle des médias
   sur macOS, `Lecture::Autre` n'y est jamais construit, et le lint refuse le code mort. Même cas
   prévenu pour la publication de sherpa-onnx, absente sur macOS. Dit dans le code par un

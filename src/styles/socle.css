@@ -235,7 +235,11 @@ body {
   position: relative;
   flex: 0 0 auto;
   display: flex;
-  gap: calc(var(--pas) * 1.5);
+  /* ⚠️ `space-between` et un petit écart minimal : à 1,5 pas fixe, les six onglets dépassaient
+   * de 7 px à 560 px, la largeur PAR DÉFAUT de la fenêtre, donc la barre de défilement s'affichait
+   * à chaque ouverture (relevé le 2026-10-31). */
+  justify-content: space-between;
+  gap: var(--pas);
   padding: calc(var(--pas) * 2) calc(var(--pas) * 2.5) 0;
   border-bottom: 1px solid var(--bordure);
   overflow-x: auto;
@@ -512,8 +516,10 @@ body {
 
 /* Les champs a valeur mettent le libelle a gauche et le controle a droite, aligne sur une colonne
  * commune : l'oeil descend une seule colonne de champs au lieu de zigzaguer. */
+/* ⚠️ Le libelle garde un plancher de 22ch : sans lui, une liste au choix long (la façon de dicter,
+ * le 2026-10-31) prenait toute la largeur et laissait un mot par ligne au texte. */
 .reglage-valeur {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(min(22ch, 100%), 1fr) minmax(0, auto);
   align-items: center;
   gap: var(--pas);
 }
@@ -522,7 +528,8 @@ body {
  * sinon les champs sans unite s'etendent plus a droite et la colonne de saisie part en escalier. */
 .reglage-controle {
   display: grid;
-  grid-template-columns: auto 3ch;
+  grid-template-columns: minmax(0, auto) 3ch;
+  min-width: 0;
   align-items: center;
   gap: calc(var(--pas) * 0.75);
 }
@@ -558,6 +565,7 @@ body {
 
 .reglage select {
   min-width: 14ch;
+  max-width: 100%;
 }
 
 .reglage input:focus-visible,
@@ -782,6 +790,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: var(--pas);
+}
+
+/* ⛔ Les boutons et la progression vont dans la colonne du TEXTE. Laisses a leur place par defaut,
+ * ils tombaient dans la premiere colonne, celle du bouton radio, qui s'elargissait a leur taille et
+ * repoussait le nom du modele vers le milieu de la carte. */
+.choix-option > .modele-actions,
+.choix-option > .progression {
+  grid-column: 2;
 }
 
 .action {

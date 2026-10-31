@@ -140,10 +140,14 @@ async function rafraichir(liste: HTMLElement, message: HTMLElement): Promise<voi
 
   for (const appareil of appareils) {
     const ligne = document.createElement('div');
-    ligne.className = 'reglage';
+    // `reglage-valeur` comme les autres champs : texte a gauche, bouton a droite. Avec `reglage`
+    // seul, le bouton s'etirait sur toute la colonne restante et collait au nom.
+    ligne.className = 'reglage reglage-valeur';
 
+    // Pas de `label` : il n'y a aucun champ a nommer, seulement le nom et l'empreinte empiles.
     const texte = document.createElement('div');
-    texte.style.flex = '1';
+    texte.style.display = 'grid';
+    texte.style.gap = '2px';
     const nom = document.createElement('span');
     nom.className = 'reglage-titre';
     nom.textContent = appareil.nom;
@@ -156,6 +160,7 @@ async function rafraichir(liste: HTMLElement, message: HTMLElement): Promise<voi
 
     const revoquer = document.createElement('button');
     revoquer.type = 'button';
+    revoquer.className = 'action';
     revoquer.textContent = 'Révoquer';
     revoquer.addEventListener('click', () => {
       void (async () => {
