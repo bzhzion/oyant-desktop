@@ -126,7 +126,7 @@ pub const CATALOGUE: &[Modele] = &[
         empreinte: "4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e",
         // ⛔ Les deux limites sont DANS la description, parce que c'est la que se fait le choix :
         // les decouvrir apres coup, c'est croire que le vocabulaire ou le coreen sont casses.
-        description: "Deux à trois fois plus rapide que Small, souvent plus juste en français. Langues européennes seulement (pas de coréen), sans vocabulaire personnalisé. Calcule sur le processeur, sauf avec une carte NVIDIA.",
+        description: "Deux à trois fois plus rapide que Small, souvent plus juste en français. Langues européennes seulement (pas de coréen), sans vocabulaire personnalisé. Utilise la carte graphique si vous l'avez choisie.",
         famille: Famille::Parakeet,
     },
 ];

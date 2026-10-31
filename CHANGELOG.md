@@ -35,9 +35,13 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
     coréen est refusé **avant d'ouvrir le microphone**, avec le remède (« choisissez un modèle
     Whisper »), au lieu de taper un texte phonétique dans une autre langue.
   - **Pas de vocabulaire personnalisé** : `parakeet-cli` n'a pas d'option `--prompt`.
-  - **Calcul sur le processeur**, sauf avec le moteur NVIDIA, dont l'archive contient son propre
-    `parakeet-cli`. Notre moteur Vulkan ne le contient pas encore : Parakeet passe alors par le
-    moteur fourni avec Oyant au lieu d'être refusé.
+  - **Sur la carte graphique quand on l'a choisie.** Le moteur NVIDIA amont contient déjà
+    `parakeet-cli`, et **notre moteur Vulkan aussi depuis sa révision `b5130-r2`**
+    (2026-10-31, 20,3 Mo, publiée sous un nouveau nom, l'ancienne restant en ligne intacte).
+    Mesuré sur GTX 1060, 20 s d'audio : **1,6 s sur la carte contre 2,8 s sur le processeur**,
+    même texte, et plus rapide que Whisper Small sur la même carte (2,5 s). Un moteur Vulkan
+    installé avant cette révision n'a pas `parakeet-cli` sur le disque : Parakeet passe alors par
+    le moteur fourni avec Oyant, et l'écran propose de réinstaller le moteur Vulkan.
 
   Le moteur fourni avec Oyant embarque désormais `parakeet-cli.exe` et `parakeet.dll` (moins d'un
   mégaoctet). Un test vérifie que le catalogue et `scripts/preparer-moteur-embarque.py` restent

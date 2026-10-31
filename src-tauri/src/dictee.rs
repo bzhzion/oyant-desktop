@@ -78,29 +78,34 @@ pub fn resoudre(modele_id: &str, langue: &str) -> Result<Outils, Manque> {
     }
 
     let moteur = moteur::actif().ok_or(Manque::AucunMoteur)?;
-    // ⚠️ **Parakeet passe par le moteur EMBARQUE quand le moteur choisi ne le contient pas**
-    // (aujourd'hui, notre artefact Vulkan). Refuser aurait bloque precisement ceux qui ont choisi
-    // une carte graphique, alors que Parakeet est concu pour le processeur. Mesure du 2026-10-29 :
-    // il y reste un peu plus lent que Whisper Small sur carte Vulkan (3,5 a 4,9 s contre 2,6 s
-    // pour 20 s d'audio), mais nettement plus juste. Ce n'est pas un repli cache : la description
-    // du modele dit qu'il calcule sur le processeur.
-    let moteur =
-        if modele.famille == modeles::Famille::Parakeet && moteur.executable_parakeet.is_empty() {
-            moteur::MOTEURS
-                .iter()
-                .find(|m| m.embarque && !m.executable_parakeet.is_empty())
-                .ok_or_else(|| Manque::FamilleIndisponible {
+    let present = |chemin: Result<PathBuf, String>| chemin.ok().filter(|c| c.is_file());
+    let mut executable = present(moteur::executable_pour(moteur, modele.famille));
+
+    // ⚠️ **Parakeet passe par le moteur EMBARQUE quand le moteur choisi ne l'a pas SUR LE
+    // DISQUE**, et pas seulement quand le catalogue dit qu'il ne l'a pas. Un moteur Vulkan
+    // installe avant que son archive ne contienne Parakeet est declare capable et ne l'est pas :
+    // decider sur le catalogue aurait annonce « programme non installe » a quelqu'un dont la
+    // dictee Whisper marche parfaitement. Refuser aurait de toute facon bloque precisement ceux
+    // qui ont choisi une carte, alors que Parakeet est concu pour le processeur. Ce n'est pas un
+    // repli cache : la description du modele dit qu'il calcule sur le processeur.
+    if executable.is_none() && modele.famille == modeles::Famille::Parakeet {
+        match moteur::MOTEURS
+            .iter()
+            .find(|m| m.embarque && !m.executable_parakeet.is_empty())
+        {
+            Some(embarque) => {
+                executable = present(moteur::executable_pour(embarque, modele.famille));
+            }
+            None if moteur.executable_parakeet.is_empty() => {
+                return Err(Manque::FamilleIndisponible {
                     modele: modele.nom.to_string(),
                     moteur: moteur.nom.to_string(),
-                })?
-        } else {
-            moteur
-        };
-    let executable =
-        moteur::executable_pour(moteur, modele.famille).map_err(|_| Manque::MoteurAbsent)?;
-    if !executable.is_file() {
-        return Err(Manque::MoteurAbsent);
+                });
+            }
+            None => {}
+        }
     }
+    let executable = executable.ok_or(Manque::MoteurAbsent)?;
 
     Ok(Outils {
         executable,

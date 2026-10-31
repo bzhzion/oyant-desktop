@@ -35,11 +35,21 @@ from pathlib import Path
 ETIQUETTE = "b5130"
 DEPOT = "https://github.com/ggml-org/whisper.cpp.git"
 
+# ⛔ **A incrementer a chaque changement du CONTENU de l'artefact, meme a etiquette egale.**
+# L'objet en ligne est epingle par son empreinte dans les installations deja faites : le
+# republier sous le meme nom casserait leur verification. `r2` ajoute Parakeet (2026-10-31) ;
+# la premiere publication, sans suffixe, reste en ligne telle quelle.
+REVISION = 2
+
 RACINE = Path(__file__).resolve().parent.parent
 TRAVAIL = RACINE / ".scratch" / "moteur-vulkan"
 SOURCES = TRAVAIL / "whisper.cpp"
 CONSTRUCTION = TRAVAIL / "build"
-ARTEFACT = TRAVAIL / f"oyant-moteur-windows-x64-vulkan-{ETIQUETTE}.zip"
+ARTEFACT = TRAVAIL / f"oyant-moteur-windows-x64-vulkan-{ETIQUETTE}-r{REVISION}.zip"
+
+# Les programmes a construire. `parakeet-cli` lit les modeles Parakeet, que `whisper-cli` ne sait
+# pas lire : sans lui, Oyant fait passer Parakeet par le moteur processeur embarque.
+CIBLES = ["whisper-cli", "parakeet-cli"]
 
 # Les seuls fichiers qui servent. L'archive amont en embarque une quarantaine d'autres
 # (bancs d'essai, serveur, jeu d'echecs, binaires de test) dont aucun n'est appele.
@@ -49,6 +59,8 @@ ATTENDUS = [
     "ggml.dll",
     "ggml-base.dll",
     "ggml-vulkan.dll",
+    "parakeet-cli.exe",
+    "parakeet.dll",
 ]
 # Plus toutes les variantes de processeur, choisies au demarrage selon la machine.
 PREFIXE_CPU = "ggml-cpu-"
@@ -92,7 +104,10 @@ def recuperer_sources():
 
 def construire(sdk):
     binaires = CONSTRUCTION / "bin" / "Release"
-    if (binaires / "whisper-cli.exe").exists():
+    # ⚠️ TOUTES les cibles, pas seulement la premiere : un repertoire construit avant l'ajout de
+    # Parakeet a `whisper-cli.exe` et pas `parakeet-cli.exe`, et s'arreter au premier ferait
+    # echouer l'assemblage sur un fichier manquant au lieu de le construire.
+    if all((binaires / f"{cible}.exe").exists() for cible in CIBLES):
         print("  binaires deja construits")
         return binaires
 
@@ -123,7 +138,7 @@ def construire(sdk):
         env=env,
     )
     executer(
-        ["cmake", "--build", str(CONSTRUCTION), "--config", "Release", "--target", "whisper-cli"],
+        ["cmake", "--build", str(CONSTRUCTION), "--config", "Release", "--target", *CIBLES],
         cwd=SOURCES,
         env=env,
     )

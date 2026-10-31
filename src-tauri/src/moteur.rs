@@ -39,9 +39,9 @@ pub struct Moteur {
     pub executable: &'static str,
     /// Le binaire qui lit les modeles Parakeet, vide si cette archive n'en contient pas.
     ///
-    /// ⚠️ Releve dans chaque archive le 2026-10-29 et pas suppose : les archives amont (processeur,
-    /// CUDA, Linux) le portent toutes, notre artefact Vulkan non, parce qu'il ne construit que la
-    /// cible `whisper-cli`. Vide veut dire « Parakeet indisponible avec ce choix », et c'est dit.
+    /// ⚠️ Releve dans chaque archive et pas suppose : les archives amont (processeur, CUDA, Linux)
+    /// le portent toutes, notre artefact Vulkan depuis sa revision `r2` (2026-10-31). Vide veut
+    /// dire « Parakeet indisponible avec ce choix » : il passe alors par le moteur embarque.
     pub executable_parakeet: &'static str,
     /// Livre PAR L'INSTALLATEUR, donc rien a telecharger ni a verifier a l'execution.
     ///
@@ -140,15 +140,20 @@ pub const MOTEURS: &[Moteur] = &[
         //
         // ⚠️ L'objet distant ne doit JAMAIS etre ecrase : l'empreinte ci-dessous est verifiee par
         // les installations deja faites. Une nouvelle version amont prend une nouvelle URL.
-        url: "https://dl.breizhzion.com/oyant-desktop/moteurs/oyant-moteur-windows-x64-vulkan-b5130.zip",
-        taille: 20_955_915,
-        empreinte: "efdcef4dfbc912e6080d042b3aa0881fd2a7d90b7a5fa4c45f2ce22e5674c7ab",
+        //
+        // `r2` (2026-10-31) ajoute Parakeet. La premiere publication, sans suffixe, reste en
+        // ligne et n'est jamais modifiee : les installations qui l'ont continuent de la verifier,
+        // et l'ecran leur propose simplement de reinstaller.
+        url: "https://dl.breizhzion.com/oyant-desktop/moteurs/oyant-moteur-windows-x64-vulkan-b5130-r2.zip",
+        taille: 21_267_666,
+        empreinte: "2fb6675fc8bb8c26b631e7a5314263e8bcb471ce54c6454a5a58e02eb7bd2250",
         // A plat, contrairement aux archives amont qui rangent tout sous `Release/`.
         prefixe: "",
         executable: "whisper-cli.exe",
-        // ⚠️ Vide tant que notre artefact ne construit que la cible `whisper-cli`. L'y ajouter
-        // demande une NOUVELLE URL, l'objet distant actuel ne devant jamais etre ecrase.
-        executable_parakeet: "",
+        // ⚠️ Mesure du 2026-10-31 sur GTX 1060, 20 s d'audio : 1,6 s sur la carte contre 2,8 s
+        // sur le processeur, meme texte. Plus rapide que Whisper Small sur carte (2,5 s), et plus
+        // juste.
+        executable_parakeet: "parakeet-cli.exe",
         disponible: true,
         indisponible_parce_que: "",
         // ⚠️ Volontairement vide, alors que `vulkan-1.dll` conditionne bel et bien ce moteur.
@@ -1482,12 +1487,18 @@ mod tests {
             .filter(|m| m.disponible && !m.embarque && m.url.contains("dl.breizhzion.com"))
         {
             let nom = moteur.url.rsplit('/').next().unwrap();
-            let porte_une_version = nom
-                .trim_end_matches(".zip")
-                .rsplit('-')
-                .next()
-                .map(|fin| fin.starts_with('b') && fin[1..].chars().all(|c| c.is_ascii_digit()))
-                .unwrap_or(false);
+            let nombre =
+                |texte: &str| !texte.is_empty() && texte.chars().all(|c| c.is_ascii_digit());
+            // `...-b5130.zip`, ou `...-b5130-r2.zip` quand le contenu change a etiquette egale
+            // (ajout de Parakeet, 2026-10-31). Les deux portent une version ; un nom sans aucune
+            // des deux serait fixe.
+            let mut morceaux = nom.trim_end_matches(".zip").rsplit('-');
+            let dernier = morceaux.next().unwrap_or("");
+            let etiquette = match dernier.strip_prefix('r') {
+                Some(revision) if nombre(revision) => morceaux.next().unwrap_or(""),
+                _ => dernier,
+            };
+            let porte_une_version = etiquette.strip_prefix('b').map(nombre).unwrap_or(false);
             assert!(
                 porte_une_version,
                 "{} : « {nom} » est un nom fixe, il serait ecrase a la prochaine version",
