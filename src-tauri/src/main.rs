@@ -167,6 +167,24 @@ fn appliquer_raccourci(app: tauri::AppHandle, libelle: String) -> Result<(), Str
     raccourci::enregistrer(&app, &libelle)
 }
 
+/// Compose le libelle d'une touche pressee dans le champ du raccourci. Voir `raccourci::composer`.
+#[tauri::command]
+fn composer_raccourci(
+    code: String,
+    ctrl: bool,
+    alt: bool,
+    maj: bool,
+    systeme: bool,
+) -> Result<Option<String>, String> {
+    raccourci::composer(&code, ctrl, alt, maj, systeme)
+}
+
+/// Retire le raccourci le temps d'en saisir un autre. Voir `raccourci::suspendre`.
+#[tauri::command]
+fn suspendre_raccourci(app: tauri::AppHandle) {
+    raccourci::suspendre(&app)
+}
+
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let demande = interpreter(&arguments);
@@ -356,6 +374,8 @@ fn interface(fenetre_visible: bool) {
             moteur::prechauffer,
             microphones,
             appliquer_raccourci,
+            composer_raccourci,
+            suspendre_raccourci,
             historique::etat_historique,
             historique::effacer_historique
         ])

@@ -77,6 +77,107 @@ pub fn normaliser(libelle: &str) -> String {
         .join("+")
 }
 
+/// Compose le libelle d'un raccourci a partir d'une touche pressee dans l'ecran de reglages.
+///
+/// `code` est le `KeyboardEvent.code` du navigateur (`KeyA`, `Digit1`, `F9`, `Numpad0`,
+/// `Insert`...), qui designe la touche PHYSIQUE : le meme raccourci quel que soit l'agencement
+/// du clavier, ce que le greffon attend aussi.
+///
+/// Rend `Ok(None)` tant que seuls des modificateurs sont enfonces (on attend la touche),
+/// `Ok(Some(libelle))` pour un raccourci complet et VALIDE, `Err` avec la raison sinon.
+///
+/// ⛔ **Une touche ordinaire seule est refusee** : « A » ou « Espace » comme raccourci global se
+/// declencherait a chaque fois qu'on l'ecrit, dans toutes les applications. Seules les touches
+/// qu'on ne tape jamais en ecrivant passent sans modificateur (F1 a F24, Inser, Pause, Arret
+/// defil). C'est ce que demandait le backlog de la 1.x.
+///
+/// ⚠️ Le libelle rendu a deja ete passe par `normaliser` puis par l'analyseur du greffon : un
+/// libelle que le systeme refuserait ne sort jamais d'ici.
+pub fn composer(
+    code: &str,
+    ctrl: bool,
+    alt: bool,
+    maj: bool,
+    systeme: bool,
+) -> Result<Option<String>, String> {
+    const MODIFICATEURS: [&str; 9] = [
+        "ControlLeft",
+        "ControlRight",
+        "AltLeft",
+        "AltRight",
+        "ShiftLeft",
+        "ShiftRight",
+        "MetaLeft",
+        "MetaRight",
+        "OSLeft",
+    ];
+    if MODIFICATEURS.contains(&code) || code == "OSRight" {
+        return Ok(None);
+    }
+
+    let touche = if let Some(lettre) = code.strip_prefix("Key") {
+        lettre.to_string()
+    } else if let Some(chiffre) = code.strip_prefix("Digit") {
+        chiffre.to_string()
+    } else {
+        code.to_string()
+    };
+    if touche.is_empty() {
+        return Err("Touche inconnue.".into());
+    }
+
+    let touche_seule_permise = matches!(touche.as_str(), "Insert" | "Pause" | "ScrollLock")
+        || touche
+            .strip_prefix('F')
+            .and_then(|n| n.parse::<u8>().ok())
+            .is_some_and(|n| (1..=24).contains(&n));
+    if !(ctrl || alt || maj || systeme) && !touche_seule_permise {
+        return Err(
+            "Ajoutez Ctrl, Alt ou Maj : une touche seule se déclencherait à chaque fois que vous \
+             l'écrivez."
+                .into(),
+        );
+    }
+    // Maj seule avec une lettre ou un chiffre, c'est une majuscule ou un symbole : meme probleme.
+    if maj && !(ctrl || alt || systeme) && !touche_seule_permise && touche.chars().count() == 1 {
+        return Err(
+            "Maj seule avec une lettre ou un chiffre, c'est une majuscule : ajoutez Ctrl ou Alt."
+                .into(),
+        );
+    }
+
+    let mut parties = Vec::new();
+    if ctrl {
+        parties.push("Ctrl");
+    }
+    if alt {
+        parties.push("Alt");
+    }
+    if maj {
+        parties.push("Shift");
+    }
+    if systeme {
+        parties.push("Super");
+    }
+    parties.push(&touche);
+    let libelle = parties.join("+");
+
+    normaliser(&libelle)
+        .parse::<Shortcut>()
+        .map_err(|_| format!("Le système ne sait pas utiliser « {libelle} » comme raccourci."))?;
+    Ok(Some(libelle))
+}
+
+/// Retire le raccourci pendant qu'on en choisit un autre dans les reglages.
+///
+/// ⚠️ Sans ca, appuyer sur le raccourci ACTUEL pour le garder (ou par megarde) lancerait une
+/// dictee au lieu de l'inscrire dans le champ : le systeme intercepte la combinaison avant que
+/// la fenetre ne la voie. L'ecran le repose en quittant le champ (`appliquer_raccourci`).
+pub fn suspendre(app: &AppHandle) {
+    let _ = app.global_shortcut().unregister_all();
+    eprintln!("raccourci : suspendu le temps de la saisie");
+}
+
 /// Enregistre le raccourci des reglages aupres du systeme.
 pub fn installer(app: &AppHandle) -> Result<(), String> {
     let reglages = crate::reglages::lire_sans_application();
@@ -192,5 +293,77 @@ mod tests {
     #[test]
     fn une_touche_inconnue_n_est_pas_devinee() {
         assert_eq!(normaliser("Ctrl+Inconnue"), "CommandOrControl+Inconnue");
+    }
+
+    #[test]
+    fn composer_attend_la_touche_tant_que_seuls_des_modificateurs_sont_enfonces() {
+        assert_eq!(composer("ControlLeft", true, false, false, false), Ok(None));
+        assert_eq!(composer("AltRight", true, true, false, false), Ok(None));
+    }
+
+    #[test]
+    fn composer_ecrit_le_libelle_dans_le_vocabulaire_des_reglages() {
+        assert_eq!(
+            composer("Space", true, true, false, false),
+            Ok(Some("Ctrl+Alt+Space".into()))
+        );
+        assert_eq!(
+            composer("KeyD", true, false, true, false),
+            Ok(Some("Ctrl+Shift+D".into()))
+        );
+        assert_eq!(
+            composer("Digit5", false, true, false, false),
+            Ok(Some("Alt+5".into()))
+        );
+        assert_eq!(
+            composer("Numpad0", true, false, false, false),
+            Ok(Some("Ctrl+Numpad0".into()))
+        );
+    }
+
+    #[test]
+    fn composer_accepte_seules_les_touches_qu_on_ne_tape_jamais_en_ecrivant() {
+        assert_eq!(
+            composer("F9", false, false, false, false),
+            Ok(Some("F9".into()))
+        );
+        assert_eq!(
+            composer("F24", false, false, false, false),
+            Ok(Some("F24".into()))
+        );
+        assert_eq!(
+            composer("Insert", false, false, false, false),
+            Ok(Some("Insert".into()))
+        );
+        assert!(composer("KeyA", false, false, false, false).is_err());
+        assert!(composer("Space", false, false, false, false).is_err());
+        assert!(composer("Home", false, false, false, false).is_err());
+    }
+
+    #[test]
+    fn composer_refuse_maj_seule_avec_une_lettre_qui_ferait_une_majuscule() {
+        assert!(composer("KeyA", false, false, true, false).is_err());
+        assert!(composer("Digit1", false, false, true, false).is_err());
+        // Maj avec une touche qui n'ecrit rien reste permise.
+        assert_eq!(
+            composer("F5", false, false, true, false),
+            Ok(Some("Shift+F5".into()))
+        );
+    }
+
+    #[test]
+    fn composer_rend_un_libelle_que_le_greffon_accepte_a_la_relecture() {
+        // Ce que `composer` rend est exactement ce qu'`enregistrer` relira depuis le fichier.
+        for (code, ctrl, alt) in [
+            ("Space", true, true),
+            ("KeyQ", false, true),
+            ("F12", true, false),
+        ] {
+            let libelle = composer(code, ctrl, alt, false, false).unwrap().unwrap();
+            assert!(
+                normaliser(&libelle).parse::<Shortcut>().is_ok(),
+                "{libelle}"
+            );
+        }
     }
 }

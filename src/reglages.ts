@@ -98,7 +98,7 @@ const GROUPES: Groupe[] = [
         cle: 'hotkey',
         type: 'texte',
         titre: 'Raccourci global',
-        aide: 'Les touches qui déclenchent la dictée, depuis n’importe quelle application.',
+        aide: 'Les touches qui déclenchent la dictée, depuis n’importe quelle application. Cliquez dans le champ, puis appuyez sur la combinaison voulue ; Échap annule.',
       },
       {
         cle: 'hotkey_mode',
@@ -594,6 +594,7 @@ function champVersDom(champ: Champ): HTMLElement {
 
   controle.id = id;
   if (champ.aide) controle.setAttribute('aria-describedby', idAide);
+  if (champ.cle === 'hotkey') brancherCaptureRaccourci(controle as HTMLInputElement);
 
   controle.addEventListener('input', () => {
     if (!courants) return;
@@ -633,6 +634,81 @@ function champVersDom(champ: Champ): HTMLElement {
   }
 
   return ligne;
+}
+
+/**
+ * Le champ du raccourci se remplit en APPUYANT sur la combinaison, pas en l'écrivant.
+ *
+ * ⛔ Écrit au clavier, le champ enregistrait chaque état intermédiaire : « Ctrl+Alt+S » était
+ * posé auprès du système le temps de finir « Space ». Et il fallait connaître les noms que le
+ * système attend. Ici le cœur compose le libellé (`composer_raccourci`, testé) et refuse ce qu'il
+ * ne saurait pas poser, ou ce qui se déclencherait en écrivant.
+ *
+ * ⚠️ Le raccourci actuel est RETIRÉ pendant la saisie (`suspendre_raccourci`) : sinon, appuyer
+ * dessus lançait une dictée au lieu de s'inscrire ici. Il est reposé en quittant le champ.
+ * ⚠️ Tab sans modificateur garde son rôle : le champ ne doit pas piéger la navigation au clavier.
+ */
+function brancherCaptureRaccourci(champ: HTMLInputElement): void {
+  let avant = '';
+  champ.readOnly = true;
+  champ.setAttribute('aria-roledescription', 'capture de raccourci');
+
+  const reposer = () => {
+    void invoke('appliquer_raccourci', { libelle: champ.value }).catch((erreur: unknown) =>
+      dire(`Le raccourci n'a pas pu être posé : ${String(erreur)}`, true),
+    );
+  };
+
+  champ.addEventListener('focus', () => {
+    avant = champ.value;
+    void invoke('suspendre_raccourci');
+  });
+  champ.addEventListener('blur', () => {
+    if (champ.value.endsWith('…')) champ.value = avant;
+    reposer();
+  });
+
+  champ.addEventListener('keydown', (evenement) => {
+    const sansModificateur =
+      !evenement.ctrlKey && !evenement.altKey && !evenement.shiftKey && !evenement.metaKey;
+    if (evenement.key === 'Tab' && sansModificateur) return;
+    evenement.preventDefault();
+    if (evenement.key === 'Escape' && sansModificateur) {
+      champ.value = avant;
+      champ.blur();
+      return;
+    }
+    void (async () => {
+      try {
+        const libelle = await invoke<string | null>('composer_raccourci', {
+          code: evenement.code,
+          ctrl: evenement.ctrlKey,
+          alt: evenement.altKey,
+          maj: evenement.shiftKey,
+          systeme: evenement.metaKey,
+        });
+        if (libelle === null) {
+          // Seuls des modificateurs pour l'instant : on montre où on en est.
+          const enCours = [
+            evenement.ctrlKey && 'Ctrl',
+            evenement.altKey && 'Alt',
+            evenement.shiftKey && 'Shift',
+            evenement.metaKey && 'Super',
+          ].filter(Boolean);
+          champ.value = `${enCours.join('+')}+…`;
+          return;
+        }
+        champ.value = libelle;
+        // L'événement `input` déclenche l'enregistrement habituel, qui repose le raccourci.
+        champ.dispatchEvent(new Event('input'));
+        avant = libelle;
+        champ.blur();
+      } catch (erreur) {
+        champ.value = avant;
+        dire(String(erreur), true);
+      }
+    })();
+  });
 }
 
 function construire(): void {

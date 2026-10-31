@@ -9,6 +9,15 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- **Le raccourci global se choisit en appuyant dessus** : on clique dans le champ et on presse la
+  combinaison, Échap annule, Tab garde son rôle. Le cœur compose le libellé
+  (`raccourci::composer`, 5 tests dont un prouvé rouge) et refuse une touche ordinaire seule, ou
+  Maj seule avec une lettre, qui se déclencheraient en écrivant ; F1 à F24, Inser, Pause et Arrêt
+  défil passent seules. Le raccourci actuel est retiré pendant la saisie, sinon appuyer dessus
+  lançait une dictée au lieu de s'inscrire, et il est reposé en quittant le champ. Avant, le champ
+  se tapait au clavier et chaque état intermédiaire (« Ctrl+Alt+S » en route vers « Space ») était
+  posé auprès du système.
+
 - **Linux en rpm, AppImage et tar.gz**, en plus du deb (apt) et du paquet pacman. Le rpm et
   l'AppImage étaient construits à chaque tag puis jetés ; ils sont maintenant publiés, sur la
   release GitHub et sous un nom fixe sur `dl.breizhzion.com/oyant-desktop/`
