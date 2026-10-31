@@ -75,6 +75,8 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Modifié
 
+- **Le bytecode Python est ignoré par git** (`__pycache__/`, `*.pyc`) : un `.pyc` produit en
+  important `scripts/mesurer-modeles.py` était parti dans un commit, retiré aussitôt.
 - **Les tailles s'écrivent à la française** (« 1,53 Go » et non « 1.53 Go »), dans le tableau
   comme sur les fiches des modèles.
 - **La vérification macOS passe par `rigel`, le Mac dédié du parc**, après qu'un job sur Mac de

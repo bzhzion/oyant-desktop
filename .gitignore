@@ -35,3 +35,7 @@ src-tauri/moteur/
 # Runtime Visual C++ embarque par l'installateur, rassemble par
 # scripts/preparer-runtime-vcpp.py. Binaires Microsoft, pas a nous de les versionner.
 src-tauri/runtime/
+
+# Python : bytecode produit en important un script
+__pycache__/
+*.pyc
